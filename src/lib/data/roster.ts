@@ -3,7 +3,9 @@ import { and, eq, inArray, lte, max, ne } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { HttpError } from "../api";
 import { today } from "../dates";
-import { normalizeSlot } from "../rules/schema";
+import { normalizeSlot, type Slot } from "../rules/schema";
+import { slotAccepts } from "../engine/lineup";
+import { getActiveRules } from "./rules";
 import { teamsPlayingByDay } from "./model";
 
 export interface RosterInput {
@@ -23,6 +25,47 @@ export async function currentTeamRoster(teamId: number): Promise<RosterInput[]> 
     .select({ playerId: schema.rosterEntries.playerId, slot: schema.rosterEntries.slot })
     .from(schema.rosterEntries)
     .where(and(eq(schema.rosterEntries.fantasyTeamId, teamId), eq(schema.rosterEntries.date, date)));
+}
+
+const OPEN_SLOTS = new Set(["BN", "IL", "IL+"]);
+
+/** Whether a player with these positions may sit in this slot (bench and IL take anyone). */
+export function canPlaySlot(slot: string, positions: string[]): boolean {
+  return OPEN_SLOTS.has(slot) || slotAccepts(slot as Slot, positions);
+}
+
+/**
+ * Throws unless every player fits his slot (positions) and no slot holds more players
+ * than the league's roster has (for example only one PG).
+ */
+export async function assertValidSlots(leagueId: number, players: (RosterInput & { positions?: string[] })[]) {
+  const rules = (await getActiveRules(leagueId))?.rules;
+  const ids = players.map((p) => p.playerId);
+  const known = ids.length
+    ? await getDb()
+        .select({ id: schema.players.id, name: schema.players.fullName, positions: schema.players.eligiblePositions })
+        .from(schema.players)
+        .where(inArray(schema.players.id, ids))
+    : [];
+  const byId = new Map(known.map((k) => [k.id, k]));
+  const counts = new Map<string, number>();
+  const problems: string[] = [];
+  for (const p of players) {
+    const slot = normalizeSlot(p.slot) ?? "BN";
+    const info = byId.get(p.playerId);
+    const positions = p.positions?.length ? p.positions : (info?.positions ?? []);
+    if (!canPlaySlot(slot, positions)) {
+      problems.push(`${info?.name ?? "A player"} (${positions.join(", ") || "no positions"}) can't play ${slot}`);
+    }
+    counts.set(slot, (counts.get(slot) ?? 0) + 1);
+  }
+  if (rules) {
+    for (const [slot, n] of counts) {
+      const max = rules.roster_slots[slot as Slot] ?? 0;
+      if (n > max) problems.push(`${slot} holds ${max}, but ${n} players are there`);
+    }
+  }
+  if (problems.length) throw new HttpError(400, problems.join("; "));
 }
 
 /** Throws when a player doesn't exist or is already on another team in the league. */

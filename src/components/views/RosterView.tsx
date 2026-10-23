@@ -8,6 +8,15 @@ import { ErrorBox, PageTitle, StatusBadge } from "../ui";
 
 /** Yahoo's roster order. */
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
+/** Same eligibility as the lineup optimizer: G takes PG/SG, F takes SF/PF, UTIL anyone with a position. */
+function fits(slot: string, positions: string[]): boolean {
+  if (slot === "BN" || slot === "IL" || slot === "IL+") return true;
+  if (slot === "UTIL") return positions.length > 0;
+  if (slot === "G") return positions.some((p) => p === "PG" || p === "SG");
+  if (slot === "F") return positions.some((p) => p === "SF" || p === "PF");
+  return positions.includes(slot);
+}
+
 const SECTIONS = [
   { title: "Starters", slots: ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL"] },
   { title: "Bench", slots: ["BN"] },
@@ -137,9 +146,15 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
     queryKey: ["league", leagueId, "roster", team.id],
     queryFn: () => api<{ players: Entry[] }>(`/api/leagues/${leagueId}/roster?teamId=${team.id}`),
   });
+  const rules = useQuery({
+    queryKey: ["league", leagueId, "rules"],
+    queryFn: () => api<{ active: { rules: { roster_slots: Record<string, number> } } | null }>(`/api/leagues/${leagueId}/rules`),
+  });
+  const capacity = rules.data?.active?.rules.roster_slots ?? null;
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [tz] = useTimeZone();
   const list = entries ?? current.data?.players ?? [];
+  const used = (slot: string, except: number) => list.filter((x) => x.slot === slot && x.playerId !== except).length;
   const [search, setSearch] = useState("");
   const results = useQuery({
     queryKey: ["player-search", leagueId, search],
@@ -161,6 +176,17 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
     },
   });
   const update = (i: number, patch: Partial<Entry>) => setEntries(list.map((e, j) => (j === i ? { ...e, ...patch } : e)));
+  /** Someone in a full slot who can move into this player's current slot. */
+  const swapPartner = (slot: string, e: Entry) => list.find((x) => x.slot === slot && x.playerId !== e.playerId && fits(e.slot, x.positions));
+  /** Moves a player; into a full slot, it swaps with a player who can take his old slot (like Yahoo). */
+  const moveTo = (i: number, slot: string) => {
+    const e = list[i];
+    const full = capacity != null && used(slot, e.playerId) >= (capacity[slot] ?? 0);
+    const partner = full ? swapPartner(slot, e) : undefined;
+    setEntries(
+      list.map((x, j) => (j === i ? { ...x, slot } : partner && x.playerId === partner.playerId ? { ...x, slot: e.slot } : x)),
+    );
+  };
 
   return (
     <>
@@ -223,11 +249,19 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
                 {rows.map(({ e, i }) => (
                   <tr key={e.playerId}>
                     <td>
-                      <select className="input w-auto py-1" value={e.slot} onChange={(ev) => update(i, { slot: ev.target.value })}>
-                        {SLOTS.map((s) => (
-                          <option key={s}>{s}</option>
-                        ))}
+                      <select className="input w-auto py-1" value={e.slot} onChange={(ev) => moveTo(i, ev.target.value)}>
+                        {SLOTS.filter((s) => s === e.slot || ((capacity ? (capacity[s] ?? 0) : 1) > 0 && fits(s, e.positions))).map((s) => {
+                          const full = capacity != null && s !== e.slot && used(s, e.playerId) >= (capacity[s] ?? 0);
+                          const partner = full ? swapPartner(s, e) : undefined;
+                          return (
+                            <option key={s} value={s} disabled={full && !partner}>
+                              {s}
+                              {full ? (partner ? ` (swap with ${partner.name})` : " (full)") : ""}
+                            </option>
+                          );
+                        })}
                       </select>
+                      {!fits(e.slot, e.positions) && <div className="mt-1 text-xs text-red-600">Can&apos;t play {e.slot}</div>}
                     </td>
                     <td>
                       <span className="font-medium">{e.name}</span> <StatusBadge status={e.injury ?? null} />

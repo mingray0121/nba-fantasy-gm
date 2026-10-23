@@ -4,7 +4,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { handler, HttpError, requireLeague } from "@/lib/api";
-import { applyTipOffLock, assertPlayersAvailable, currentTeamRoster, replaceTeamRoster } from "@/lib/data/roster";
+import { applyTipOffLock, assertPlayersAvailable, assertValidSlots, canPlaySlot, currentTeamRoster, replaceTeamRoster } from "@/lib/data/roster";
 import { getActiveRules } from "@/lib/data/rules";
 import { runJob } from "@/lib/jobs/registry";
 import { addDays, toLocalDate, today, weekRange } from "@/lib/dates";
@@ -94,8 +94,16 @@ export const POST = handler(async (req: Request, { params }: Ctx) => {
   }
 
   const next = roster.filter((r) => r.playerId !== dropPlayerId);
-  // The new player takes the dropped player's slot, else the bench.
-  if (addPlayerId) next.push({ playerId: addPlayerId, slot: dropped?.slot ?? "BN" });
+  // The new player takes the dropped player's slot when his positions fit it, else the bench.
+  if (addPlayerId) {
+    const [added] = await db
+      .select({ positions: schema.players.eligiblePositions })
+      .from(schema.players)
+      .where(eq(schema.players.id, addPlayerId));
+    const slot = dropped && canPlaySlot(dropped.slot, added?.positions ?? []) ? dropped.slot : "BN";
+    next.push({ playerId: addPlayerId, slot });
+  }
+  await assertValidSlots(league.id, next);
   const { players: toSave, locked } = await applyTipOffLock(team.id, next);
   await replaceTeamRoster(league.id, team.id, toSave);
 

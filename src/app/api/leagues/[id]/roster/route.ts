@@ -6,7 +6,7 @@ import { handler, HttpError, requireLeague } from "@/lib/api";
 import { runJob } from "@/lib/jobs/registry";
 import { today } from "@/lib/dates";
 import { teamsPlayingByDay } from "@/lib/data/model";
-import { applyTipOffLock, assertPlayersAvailable, replaceTeamRoster } from "@/lib/data/roster";
+import { applyTipOffLock, assertPlayersAvailable, assertValidSlots, replaceTeamRoster } from "@/lib/data/roster";
 
 type Ctx = { params: Promise<{ id: string }> };
 type League = Awaited<ReturnType<typeof requireLeague>>;
@@ -74,6 +74,7 @@ export const PUT = handler(async (req: Request, { params }: Ctx) => {
   const { teamId, players } = input.parse(await req.json());
   const team = await findTeam(league, teamId);
   await assertPlayersAvailable(league.id, team.id, players.map((p) => p.playerId));
+  await assertValidSlots(league.id, players);
   const db = getDb();
   for (const p of players) {
     if (p.positions?.length) {
