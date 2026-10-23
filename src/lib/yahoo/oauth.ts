@@ -85,7 +85,10 @@ export async function fetchGuid(accessToken: string): Promise<string> {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
-  if (!fantasy.ok) throw new Error(`Could not look up Yahoo account: ${fantasy.status}`);
+  if (!fantasy.ok) {
+    const detail = (await fantasy.text()).slice(0, 200);
+    throw new Error(`Could not look up Yahoo account: ${fantasy.status} ${detail}`);
+  }
   const body = (await fantasy.json()) as { fantasy_content: { users: { "0": { user: { guid?: string }[] } } } };
   const guid = body.fantasy_content.users["0"].user.find((p) => p.guid)?.guid;
   if (!guid) throw new Error("Yahoo did not return an account id");
