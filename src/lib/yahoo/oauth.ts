@@ -19,6 +19,9 @@ export function authorizeUrl(state: string): string {
     client_id: env("YAHOO_CLIENT_ID"),
     redirect_uri: env("YAHOO_REDIRECT_URI"),
     response_type: "code",
+    // Ask for Fantasy Sports read access explicitly; without it, newer Yahoo apps get a token
+    // the Fantasy API rejects with 403 "This application is not authorized".
+    scope: "fspt-r",
     language: "en-us",
     state,
   });
