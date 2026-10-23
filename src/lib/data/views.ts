@@ -11,7 +11,7 @@ import {
   type ModelPlayer,
 } from "./model";
 import { optimizeLineup, type LineupPlayer } from "../engine/lineup";
-import { matchupWeights, projectCategories, type CategoryProjection } from "../engine/matchup";
+import { matchupWeights, projectCategories, toDateInputs, type CategoryProjection } from "../engine/matchup";
 import { suggestAddDrops, type AddDropPlayer } from "../engine/addDrop";
 import { computeWindows, blendWindows, DEFAULT_WEIGHTS } from "../engine/projections";
 import { pointsValue, round } from "../engine/values";
@@ -244,7 +244,26 @@ export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResu
 
 export async function matchupView(leagueId: number) {
   const ctx = await loadLeagueContext(leagueId);
-  return { result: await matchupProjection(ctx), punted: ctx.settings.puntCategories };
+  const result = await matchupProjection(ctx);
+  // Manual leagues set their matchup by hand: the opponent and the week's stats so far.
+  let manual = null;
+  if (ctx.league.source === "manual" && ctx.myTeam) {
+    const week = currentWeek(ctx);
+    const m = await latestMatchup(leagueId, ctx.myTeam.id);
+    const current = m && m.weekStart === week.start ? m : null;
+    manual = {
+      week: { start: week.start, end: week.end },
+      teams: ctx.teams.filter((t) => !t.isMine).map((t) => ({ id: t.id, name: t.name })),
+      scoringType: ctx.rules.scoring_type,
+      inputs: ctx.rules.scoring_type === "h2h_points" ? [] : toDateInputs(ctx.rules.categories, ctx.rules.custom_stats),
+      opponentTeamId: current?.opponentTeamId ?? null,
+      myStats: current?.statsToDate ?? {},
+      opponentStats: current?.opponentStatsToDate ?? {},
+      myPoints: current?.pointsToDate ?? null,
+      opponentPoints: current?.opponentPointsToDate ?? null,
+    };
+  }
+  return { result, punted: ctx.settings.puntCategories, manual };
 }
 
 /* ------------------------------------------------------------------ */

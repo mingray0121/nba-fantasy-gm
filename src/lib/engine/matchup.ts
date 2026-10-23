@@ -73,6 +73,17 @@ const TO_DATE_PARTS: Record<PercentStatKey, [StatKey, StatKey]> = {
   "A/T": ["AST", "TO"],
 };
 
+/** The week-to-date numbers a matchup needs: makes and attempts for ratios, totals for everything else. */
+export function toDateInputs(categories: string[], custom: CustomStats = {}): string[] {
+  const out: string[] = [];
+  for (const key of categories) {
+    const def = custom[key];
+    const parts = def && "ratio" in def ? def.ratio : key in TO_DATE_PARTS ? TO_DATE_PARTS[key as PercentStatKey] : [key];
+    for (const k of parts) if (!out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
 function finalValue(key: string, toDate: ToDate, remaining: StatLine, fractionLeft: number, custom: CustomStats): number {
   const def = custom[key];
   if (def && "sum" in def) {
