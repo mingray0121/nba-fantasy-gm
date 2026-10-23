@@ -1,0 +1,130 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../fetcher";
+import { Badge, Empty, ErrorBox, fmtTime, Loading, PageTitle, StatusBadge } from "../ui";
+import type { LineupRow } from "@/lib/data/views";
+
+interface Lineup {
+  date: string;
+  rows: LineupRow[];
+  firstTip: string | null;
+  rosterDate: string | null;
+  totalValue?: number;
+}
+
+function localToday() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function shift(day: string, n: number) {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export function TodayView({ leagueId }: { leagueId: number }) {
+  const [date, setDate] = useState(localToday);
+  const q = useQuery({
+    queryKey: ["league", leagueId, "lineup", date],
+    queryFn: () => api<Lineup>(`/api/leagues/${leagueId}/lineup?date=${date}`),
+  });
+  const changes = q.data?.rows.filter((r) => r.action !== "keep") ?? [];
+
+  return (
+    <>
+      <PageTitle
+        title={date === localToday() ? "Today" : date}
+        subtitle={
+          q.data?.firstTip ? `First tip-off ${fmtTime(q.data.firstTip)} · each player locks at their own tip` : "No games scheduled"
+        }
+        actions={
+          <div className="flex items-center gap-1">
+            <button className="btn-secondary px-2" onClick={() => setDate((d) => shift(d, -1))} aria-label="Previous day">
+              ‹
+            </button>
+            <input type="date" className="input w-auto py-1.5" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+            <button className="btn-secondary px-2" onClick={() => setDate((d) => shift(d, 1))} aria-label="Next day">
+              ›
+            </button>
+          </div>
+        }
+      />
+      {q.isLoading && <Loading />}
+      {q.error && <ErrorBox error={q.error} />}
+      {q.data && q.data.rows.length === 0 && <Empty>No roster yet. Press Refresh to pull it from Yahoo.</Empty>}
+      {q.data && q.data.rows.length > 0 && (
+        <>
+          <div className="card mb-4 p-4 text-sm">
+            {changes.length === 0 ? (
+              <p>Your current lineup is already the best one for this day.</p>
+            ) : (
+              <>
+                <p className="font-medium">{changes.length} change{changes.length > 1 ? "s" : ""} to make in Yahoo:</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {changes.map((r) => (
+                    <li key={r.playerId}>
+                      {r.action === "start" ? "Start" : "Bench"} <strong>{r.name}</strong>
+                      {r.action === "start" ? ` at ${r.recommendedSlot}` : ""} (now {r.currentSlot})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+          <div className="card overflow-x-auto">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Player</th>
+                  <th>Game</th>
+                  <th className="text-right">Value</th>
+                  <th className="hidden md:table-cell">Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.data.rows.map((r) => (
+                  <tr key={r.playerId} className={r.recommendedSlot === "BN" || r.recommendedSlot.startsWith("IL") ? "opacity-70" : ""}>
+                    <td className="font-mono text-xs">
+                      {r.recommendedSlot}
+                      {r.action !== "keep" && (
+                        <div className="mt-0.5">
+                          <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "start" : "bench"}</Badge>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <Link href={`/players/${r.playerId}?league=${leagueId}`} className="font-medium hover:underline">
+                        {r.name}
+                      </Link>{" "}
+                      <StatusBadge status={r.status} />
+                      <div className="text-xs text-slate-500">
+                        {r.team ?? "FA"} · {r.positions.join(", ")}
+                      </div>
+                      <div className="text-xs text-slate-500 md:hidden">{r.reason}</div>
+                    </td>
+                    <td className="text-xs">
+                      {r.game ? (
+                        <>
+                          {r.game.home ? "vs" : "@"} {r.game.opponent}
+                          <div className="text-slate-500">{fmtTime(r.game.tipTime)}</div>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="text-right tabular-nums">{r.value.toFixed(2)}</td>
+                    <td className="hidden text-xs text-slate-500 md:table-cell">{r.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}

@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-court-50: #f3f7fb;
+  --color-court-100: #e2ecf6;
+  --color-court-500: #2f6fae;
+  --color-court-600: #245a91;
+  --color-court-700: #1c4874;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+}
+
+@utility card {
+  @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-court-600 text-white hover:bg-court-700;
+}
+@utility btn-secondary {
+  @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+}
+@utility input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900;
+}
+@utility table-base {
+  @apply w-full text-left text-sm;
+  & th {
+    @apply px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase;
+  }
+  & td {
+    @apply border-t border-slate-100 px-3 py-2 dark:border-slate-800;
+  }
+}
