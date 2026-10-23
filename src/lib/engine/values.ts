@@ -25,7 +25,7 @@ export interface CategoryScore {
 interface CatStats {
   mean: number;
   sd: number;
-  pct?: number; // pool percentage for FG%/FT%/3P%
+  pct?: number; // pool percentage (or ratio) for FG%/FT%/3P%/A/T
 }
 
 /**
@@ -51,7 +51,8 @@ export function buildCategoryScorer(
       const totalMade = pool.reduce((s, l) => s + l[made], 0);
       const totalAtt = pool.reduce((s, l) => s + l[att], 0);
       pct = totalAtt > 0 ? totalMade / totalAtt : 0;
-      raw = pool.map((l) => l[att] * (statValue(l, cat) - pct!));
+      // attempts x (player % - pool %), written so a ratio with 0 attempts (A/T with no turnovers) still counts.
+      raw = pool.map((l) => l[made] - pct! * l[att]);
     } else {
       raw = pool.map((l) => statValue(l, cat));
     }
@@ -67,8 +68,8 @@ export function buildCategoryScorer(
       const s = stats.get(cat)!;
       let v: number;
       if (s.pct !== undefined) {
-        const { att } = PERCENT_STATS[cat as PercentStatKey];
-        v = line[att] * (statValue(line, cat) - s.pct);
+        const { made, att } = PERCENT_STATS[cat as PercentStatKey];
+        v = line[made] - s.pct * line[att];
       } else {
         v = statValue(line, cat);
       }

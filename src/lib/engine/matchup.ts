@@ -32,7 +32,7 @@ export function projectCategories(input: {
     let margin: number;
     let closeAt: number;
     let decidedAt: number;
-    if (key in PERCENT_STATS) {
+    if (key in PERCENT_STATS && key !== "A/T") {
       margin = better;
       closeAt = 0.01;
       decidedAt = 0.035;
@@ -52,6 +52,14 @@ export function projectCategories(input: {
   });
 }
 
+/** Week-to-date counting stats behind each ratio category. */
+const TO_DATE_PARTS: Record<PercentStatKey, [StatKey, StatKey]> = {
+  "FG%": ["FGM", "FGA"],
+  "FT%": ["FTM", "FTA"],
+  "3P%": ["3PM", "3PA"],
+  "A/T": ["AST", "TO"],
+};
+
 function finalValue(
   key: StatKey,
   toDate: Partial<Record<StatKey, number>>,
@@ -60,8 +68,7 @@ function finalValue(
 ): number {
   if (key in PERCENT_STATS) {
     const { made, att } = PERCENT_STATS[key as PercentStatKey];
-    const madeKey = key === "FG%" ? "FGM" : key === "FT%" ? "FTM" : "3PM";
-    const attKey = key === "FG%" ? "FGA" : key === "FT%" ? "FTA" : "3PA";
+    const [madeKey, attKey] = TO_DATE_PARTS[key as PercentStatKey];
     const m0 = toDate[madeKey];
     const a0 = toDate[attKey];
     if (m0 != null && a0 != null) {

@@ -26,6 +26,8 @@ export const PERCENT_STATS = {
   "FG%": { made: "fgm", att: "fga" },
   "FT%": { made: "ftm", att: "fta" },
   "3P%": { made: "fg3m", att: "fg3a" },
+  // Assist-to-turnover ratio: a ratio of two counting stats, scored like a percentage.
+  "A/T": { made: "ast", att: "tov" },
 } as const;
 
 export type CountingStatKey = keyof typeof COUNTING_STATS;
@@ -62,6 +64,7 @@ export const STAT_DISPLAY: Record<StatKey, string> = {
   "FG%": "Field goal %",
   "FT%": "Free throw %",
   "3P%": "3-point %",
+  "A/T": "Assist / turnover ratio",
 };
 
 /** Aliases seen in Yahoo settings, uploads and CSVs, mapped to canonical keys. */
@@ -102,6 +105,10 @@ const ALIASES: Record<string, StatKey> = {
   FTPCT: "FT%",
   "3PT%": "3P%",
   "3P%": "3P%",
+  "A/T": "A/T",
+  "AST/TO": "A/T",
+  "AST/TOV": "A/T",
+  ATO: "A/T",
 };
 
 export function normalizeStatKey(raw: string): StatKey | null {
@@ -154,7 +161,7 @@ export const EMPTY_LINE: StatLine = {
   minutes: 0,
 };
 
-/** Value of one stat key for a stat line (percentages as 0..1). */
+/** Value of one stat key for a stat line (percentages as 0..1, A/T as a ratio). */
 export function statValue(line: StatLine, key: StatKey): number {
   if (key in PERCENT_STATS) {
     const { made, att } = PERCENT_STATS[key as PercentStatKey];

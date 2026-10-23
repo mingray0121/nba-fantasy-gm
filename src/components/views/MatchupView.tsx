@@ -8,7 +8,8 @@ type Result =
   | { kind: "categories"; week: number; opponentName: string | null; categories: { key: string; mine: number; opponent: number; state: "winning" | "losing" | "close"; decided: boolean }[] }
   | { kind: "points"; week: number; opponentName: string | null; mine: number; opponent: number; mineToDate: number; opponentToDate: number };
 
-const fmt = (key: string, v: number) => (key.endsWith("%") ? v.toFixed(3).replace(/^0/, "") : Math.round(v).toString());
+const fmt = (key: string, v: number) =>
+  key.endsWith("%") ? v.toFixed(3).replace(/^0/, "") : key === "A/T" ? v.toFixed(2) : Math.round(v).toString();
 
 export function MatchupView({ leagueId }: { leagueId: number }) {
   const q = useQuery({

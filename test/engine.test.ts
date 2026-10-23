@@ -4,7 +4,7 @@ import { buildCategoryScorer, pointsValue } from "@/lib/engine/values";
 import { averageLogs, blendWindows, computeWindows, playProbability, type GameLog } from "@/lib/engine/projections";
 import { projectCategories, matchupWeights } from "@/lib/engine/matchup";
 import { suggestAddDrops } from "@/lib/engine/addDrop";
-import { EMPTY_LINE, type StatLine } from "@/lib/stats";
+import { EMPTY_LINE, normalizeStatKey, type StatLine } from "@/lib/stats";
 
 const line = (o: Partial<StatLine>): StatLine => ({ ...EMPTY_LINE, ...o });
 
@@ -166,5 +166,14 @@ describe("add/drop", () => {
     );
     // P11 replaces P3; P10 (1.4) doesn't beat the next weakest (P1, 2.0); P12 is out; IL P2 is never dropped.
     expect(s.map((x) => [x.add.playerId, x.drop.playerId])).toEqual([[11, 3]]);
+  });
+});
+
+describe("A/T category", () => {
+  it("parses A/T and rewards a high ratio even with zero turnovers", () => {
+    expect(normalizeStatKey("A/T")).toBe("A/T");
+    const at = (ast: number, tov: number) => line({ ast, tov });
+    const score = buildCategoryScorer([at(2, 2), at(4, 2), at(1, 1), at(6, 3)], ["A/T"]);
+    expect(score(at(5, 0)).total).toBeGreaterThan(score(at(5, 5)).total);
   });
 });
