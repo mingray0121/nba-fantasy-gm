@@ -9,5 +9,5 @@ jobs:
   run:
     uses: ./.github/workflows/_call-job.yml
     with:
-      jobs: roster-sync injuries values
+      jobs: roster-sync players injuries values
     secrets: inherit

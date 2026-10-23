@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { runLogged, type JobResult } from "./run";
-import { computeProjections, syncBoxScores, syncInjuries, syncSchedule } from "./shared";
+import { computeProjections, syncBoxScores, syncInjuries, syncPlayers, syncSchedule } from "./shared";
 import { computeValues, importRules, syncFreeAgents, syncMatchup, syncRosters } from "./league";
 
 type SharedJob = { scope: "shared"; run: () => Promise<JobResult> };
@@ -17,6 +17,7 @@ export const JOBS: Record<string, SharedJob | LeagueJob> = {
   schedule: { scope: "shared", run: syncSchedule },
   "box-scores": { scope: "shared", run: () => syncBoxScores() },
   injuries: { scope: "shared", run: syncInjuries },
+  players: { scope: "shared", run: syncPlayers },
   projections: { scope: "shared", run: () => computeProjections() },
 };
 

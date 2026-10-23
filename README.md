@@ -79,6 +79,14 @@ Create an app at <https://developer.yahoo.com/apps/create/>:
 4. Deploy. `vercel.json` runs `drizzle-kit migrate` before `next build`, so the schema is created on the first deploy.
 5. Open the app and sign in with Yahoo. The first account to sign in becomes the owner unless `ALLOWED_YAHOO_GUID` is set; nobody else can sign in afterwards.
 
+### Without Yahoo API access (manual leagues)
+
+Yahoo now approves Fantasy API access per app (apply at <https://sports.yahoo.com/developer/access/>). Until then:
+
+1. Set `APP_PASSWORD` in Vercel (and `.env.local`) and sign in with it. The first Yahoo sign-in later links your Yahoo account to the same owner, so nothing is lost.
+2. Create a manual league, then on **Roster** add every team and pick their players. Players come from ESPN (`players` job), with positions and injuries.
+3. Players on no team count as free agents, so start / bench and add / drop both work. Re-save a team when its roster changes.
+
 ### 3. Scheduled jobs (GitHub Actions)
 
 In the GitHub repo: **Settings → Secrets and variables → Actions**, add:

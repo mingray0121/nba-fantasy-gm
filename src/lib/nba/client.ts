@@ -331,6 +331,47 @@ export class EspnSource implements NbaDataSource {
   }
 }
 
+export interface EspnRosterPlayer {
+  nbaPlayerId: number;
+  name: string;
+  teamAbbr: string;
+  positions: string[];
+  injuryStatus: string | null; // "Out", "Day-To-Day", "Questionable", ...
+}
+
+/** ESPN positions to fantasy positions ("G" -> PG, SG). */
+const ESPN_POSITIONS: Record<string, string[]> = {
+  PG: ["PG"],
+  SG: ["SG"],
+  SF: ["SF"],
+  PF: ["PF"],
+  C: ["C"],
+  G: ["PG", "SG"],
+  F: ["SF", "PF"],
+  GF: ["SG", "SF"],
+  FC: ["PF", "C"],
+};
+
+/** One team's roster from ESPN (`/teams/{id}/roster`). */
+export function parseEspnRoster(body: any): EspnRosterPlayer[] {
+  const teamAbbr = espnTeamAbbr(body.team?.abbreviation ?? "");
+  return (body.athletes ?? []).map((a: any) => ({
+    nbaPlayerId: Number(a.id),
+    name: a.fullName ?? a.displayName ?? "",
+    teamAbbr,
+    positions: ESPN_POSITIONS[String(a.position?.abbreviation ?? "").toUpperCase().replace("-", "")] ?? [],
+    injuryStatus: a.injuries?.[0]?.status ?? null,
+  }));
+}
+
+/** Every current NBA player with positions and injury status, from ESPN team rosters. */
+export async function espnAllRosters(): Promise<EspnRosterPlayer[]> {
+  const teams = await getJson(`${ESPN_BASE}/teams`);
+  const teamIds: string[] = (teams.sports?.[0]?.leagues?.[0]?.teams ?? []).map((t: any) => String(t.team.id));
+  const bodies = await Promise.all(teamIds.map((id) => getJson(`${ESPN_BASE}/teams/${id}/roster`)));
+  return bodies.flatMap(parseEspnRoster);
+}
+
 export function primarySource(): NbaDataSource {
   return new EspnSource();
 }

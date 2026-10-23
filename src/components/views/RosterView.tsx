@@ -4,10 +4,15 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { ErrorBox, PageTitle } from "../ui";
-import type { LineupRow } from "@/lib/data/views";
 
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
 const POSITIONS = ["PG", "SG", "SF", "PF", "C"];
+
+interface Team {
+  id: number;
+  name: string;
+  isMine: boolean;
+}
 
 interface Entry {
   playerId: number;
@@ -16,51 +21,173 @@ interface Entry {
   positions: string[];
 }
 
-/** Manual leagues only: pick players and their current slots. */
+interface SearchResult {
+  id: number;
+  name: string;
+  positions: string[];
+  team: string | null;
+  injury: string | null;
+  owner: { teamId: number; teamName: string } | null;
+}
+
+/** Manual leagues only: every team's players and their current slots. */
 export function RosterView({ leagueId }: { leagueId: number }) {
   const qc = useQueryClient();
+  const teams = useQuery({
+    queryKey: ["league", leagueId, "teams"],
+    queryFn: () => api<{ teams: Team[] }>(`/api/leagues/${leagueId}/teams`),
+  });
+  const [selected, setSelected] = useState<number | null>(null);
+  const teamId = selected ?? teams.data?.teams.find((t) => t.isMine)?.id ?? teams.data?.teams[0]?.id ?? null;
+  const team = teams.data?.teams.find((t) => t.id === teamId) ?? null;
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["league", leagueId] });
+  const addTeam = useMutation({
+    mutationFn: (name: string) =>
+      api<{ team: Team }>(`/api/leagues/${leagueId}/teams`, { method: "POST", body: JSON.stringify({ name }) }),
+    onSuccess: (r) => {
+      setSelected(r.team.id);
+      invalidate();
+    },
+  });
+  const editTeam = useMutation({
+    mutationFn: (patch: { name?: string; isMine?: true }) =>
+      api(`/api/leagues/${leagueId}/teams/${teamId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    onSuccess: invalidate,
+  });
+  const deleteTeam = useMutation({
+    mutationFn: () => api(`/api/leagues/${leagueId}/teams/${teamId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setSelected(null);
+      invalidate();
+    },
+  });
+
+  return (
+    <>
+      <PageTitle
+        title="Roster"
+        subtitle="Enter every team's players. Players on no team count as free agents for add / drop."
+      />
+      <div className="card mb-4 flex flex-wrap items-center gap-2 p-4">
+        {teams.data?.teams.map((t) => (
+          <button key={t.id} className={t.id === teamId ? "btn-primary" : "btn-secondary"} onClick={() => setSelected(t.id)}>
+            {t.name}
+            {t.isMine ? " (you)" : ""}
+          </button>
+        ))}
+        <button
+          className="btn-secondary"
+          disabled={addTeam.isPending}
+          onClick={() => {
+            const name = prompt("Team name");
+            if (name?.trim()) addTeam.mutate(name.trim());
+          }}
+        >
+          + Add team
+        </button>
+      </div>
+      {(teams.error || addTeam.error || editTeam.error || deleteTeam.error) && (
+        <ErrorBox error={teams.error ?? addTeam.error ?? editTeam.error ?? deleteTeam.error} />
+      )}
+      {team && (
+        <>
+          <div className="mb-3 flex flex-wrap gap-3 text-xs">
+            <button
+              className="text-slate-500 underline"
+              onClick={() => {
+                const name = prompt("Rename team", team.name);
+                if (name?.trim()) editTeam.mutate({ name: name.trim() });
+              }}
+            >
+              Rename
+            </button>
+            {!team.isMine && (
+              <>
+                <button className="text-slate-500 underline" onClick={() => editTeam.mutate({ isMine: true })}>
+                  This is my team
+                </button>
+                <button
+                  className="text-red-600 underline"
+                  onClick={() => {
+                    if (confirm(`Delete ${team.name} and its roster?`)) deleteTeam.mutate();
+                  }}
+                >
+                  Delete team
+                </button>
+              </>
+            )}
+          </div>
+          <TeamRoster key={team.id} leagueId={leagueId} team={team} />
+        </>
+      )}
+    </>
+  );
+}
+
+function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
+  const qc = useQueryClient();
   const current = useQuery({
-    queryKey: ["league", leagueId, "lineup", "roster-editor"],
-    queryFn: () => api<{ rows: LineupRow[] }>(`/api/leagues/${leagueId}/lineup`),
+    queryKey: ["league", leagueId, "roster", team.id],
+    queryFn: () => api<{ players: Entry[] }>(`/api/leagues/${leagueId}/roster?teamId=${team.id}`),
   });
   const [entries, setEntries] = useState<Entry[] | null>(null);
-  const list =
-    entries ?? current.data?.rows.map((r) => ({ playerId: r.playerId, name: r.name, slot: r.currentSlot, positions: r.positions })) ?? [];
+  const list = entries ?? current.data?.players ?? [];
   const [search, setSearch] = useState("");
   const results = useQuery({
-    queryKey: ["player-search", search],
-    queryFn: () => api<{ players: { id: number; name: string; positions: string[] }[] }>(`/api/players/search?q=${encodeURIComponent(search)}`),
+    queryKey: ["player-search", leagueId, search],
+    queryFn: () => api<{ players: SearchResult[] }>(`/api/players/search?league=${leagueId}&q=${encodeURIComponent(search)}`),
     enabled: search.trim().length >= 2,
   });
   const save = useMutation({
     mutationFn: () =>
       api(`/api/leagues/${leagueId}/roster`, {
         method: "PUT",
-        body: JSON.stringify({ players: list.map((e) => ({ playerId: e.playerId, slot: e.slot, positions: e.positions })) }),
+        body: JSON.stringify({ teamId: team.id, players: list.map((e) => ({ playerId: e.playerId, slot: e.slot, positions: e.positions })) }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["league", leagueId] }),
+    onSuccess: () => {
+      setEntries(null);
+      qc.invalidateQueries({ queryKey: ["league", leagueId] });
+    },
   });
   const update = (i: number, patch: Partial<Entry>) => setEntries(list.map((e, j) => (j === i ? { ...e, ...patch } : e)));
 
   return (
     <>
-      <PageTitle title="Roster" subtitle="For a manual league, set your players and their slots here." />
       <div className="card mb-4 p-4">
-        <input className="input" placeholder="Search players by name" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          className="input"
+          placeholder={`Add a player to ${team.name}: search by name`}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <div className="mt-2 grid gap-1">
-          {results.data?.players.map((p) => (
-            <button
-              key={p.id}
-              className="btn-secondary justify-between"
-              onClick={() => {
-                if (!list.some((e) => e.playerId === p.id)) setEntries([...list, { playerId: p.id, name: p.name, slot: "BN", positions: p.positions }]);
-                setSearch("");
-              }}
-            >
-              <span>{p.name}</span>
-              <span className="text-xs text-slate-500">{p.positions.join(", ") || "positions unknown"}</span>
-            </button>
-          ))}
+          {results.data?.players.map((p) => {
+            const onThisTeam = list.some((e) => e.playerId === p.id);
+            const elsewhere = p.owner && p.owner.teamId !== team.id ? p.owner.teamName : null;
+            return (
+              <button
+                key={p.id}
+                className="btn-secondary justify-between"
+                disabled={onThisTeam || Boolean(elsewhere)}
+                onClick={() => {
+                  setEntries([...list, { playerId: p.id, name: p.name, slot: "BN", positions: p.positions }]);
+                  setSearch("");
+                }}
+              >
+                <span>
+                  {p.name}
+                  <span className="ml-2 text-xs text-slate-500">
+                    {[p.team, p.positions.join(", ") || "positions unknown"].filter(Boolean).join(" · ")}
+                  </span>
+                  {p.injury && <span className="ml-2 text-xs text-red-600">{p.injury}</span>}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {onThisTeam ? "On this team" : elsewhere ? `On ${elsewhere}` : "Free agent"}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
       <div className="card overflow-x-auto">
@@ -105,12 +232,19 @@ export function RosterView({ leagueId }: { leagueId: number }) {
                 </td>
               </tr>
             ))}
+            {list.length === 0 && !current.isLoading && (
+              <tr>
+                <td colSpan={4} className="text-slate-500">
+                  No players yet. Search above to add them.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-      {save.error && <ErrorBox error={save.error} />}
-      <button className="btn-primary mt-3" disabled={save.isPending} onClick={() => save.mutate()}>
-        {save.isPending ? "Saving…" : "Save roster"}
+      {(current.error || save.error) && <ErrorBox error={current.error ?? save.error} />}
+      <button className="btn-primary mt-3" disabled={save.isPending || entries === null} onClick={() => save.mutate()}>
+        {save.isPending ? "Saving…" : `Save ${team.name}`}
       </button>
     </>
   );

@@ -17,5 +17,5 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '0 10 * * *' }}
     uses: ./.github/workflows/_call-job.yml
     with:
-      jobs: schedule rules-import roster-sync free-agents values
+      jobs: schedule players rules-import roster-sync free-agents values
     secrets: inherit

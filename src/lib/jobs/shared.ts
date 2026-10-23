@@ -2,7 +2,7 @@
 import { and, eq, gte, inArray, isNotNull, lt, notInArray, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import type { InjuryStatus } from "@/db/schema";
-import { fallbackSource, primarySource, type NbaBoxLine } from "../nba/client";
+import { espnAllRosters, fallbackSource, primarySource, type NbaBoxLine } from "../nba/client";
 import { matchPlayer } from "../players/match";
 import { computeWindows, type GameLog } from "../engine/projections";
 import { today, addDays } from "../dates";
@@ -234,8 +234,94 @@ export async function syncInjuries(): Promise<JobResult> {
   }
   await db
     .delete(schema.playerInjuries)
-    .where(keep.length ? notInArray(schema.playerInjuries.playerId, keep) : sql`true`);
+    .where(
+      and(
+        eq(schema.playerInjuries.source, "yahoo"),
+        keep.length ? notInArray(schema.playerInjuries.playerId, keep) : sql`true`,
+      ),
+    );
   return { rowsWritten: written };
+}
+
+const ESPN_INJURY: Record<string, InjuryStatus> = {
+  OUT: "Out",
+  SUSPENSION: "Out",
+  "DAY-TO-DAY": "DTD",
+  DOUBTFUL: "Doubtful",
+  QUESTIONABLE: "Questionable",
+  PROBABLE: "Probable",
+};
+
+/**
+ * Every NBA player from ESPN team rosters: names, teams, positions (only where
+ * none are known yet) and injury status. Lets manual leagues pick any player
+ * without Yahoo. Yahoo-sourced injuries win over ESPN ones.
+ */
+export async function syncPlayers(): Promise<JobResult> {
+  const db = getDb();
+  const roster = await espnAllRosters();
+  const teams = await db.select().from(schema.nbaTeams);
+  const teamIdByAbbr = new Map(teams.map((t) => [t.abbreviation, t.id]));
+  const existing = await db
+    .select({ id: schema.players.id, nbaPlayerId: schema.players.nbaPlayerId, positions: schema.players.eligiblePositions })
+    .from(schema.players)
+    .where(isNotNull(schema.players.nbaPlayerId));
+  const byNbaId = new Map(existing.map((p) => [p.nbaPlayerId!, p]));
+
+  const injured: { playerId: number; status: InjuryStatus }[] = [];
+  for (const r of roster) {
+    if (!r.nbaPlayerId || !r.name) continue;
+    const nbaTeamId = teamIdByAbbr.get(r.teamAbbr) ?? null;
+    const known = byNbaId.get(r.nbaPlayerId);
+    let playerId: number;
+    if (known) {
+      await db
+        .update(schema.players)
+        .set({
+          fullName: r.name,
+          nbaTeamId,
+          isActive: true,
+          updatedAt: new Date(),
+          ...(known.positions.length === 0 && r.positions.length ? { eligiblePositions: r.positions } : {}),
+        })
+        .where(eq(schema.players.id, known.id));
+      playerId = known.id;
+    } else {
+      const [row] = await db
+        .insert(schema.players)
+        .values({ nbaPlayerId: r.nbaPlayerId, fullName: r.name, nbaTeamId, eligiblePositions: r.positions })
+        .returning({ id: schema.players.id });
+      playerId = row.id;
+    }
+    const status = r.injuryStatus ? ESPN_INJURY[r.injuryStatus.toUpperCase()] : undefined;
+    if (status) injured.push({ playerId, status });
+  }
+
+  const yahooRows = await db
+    .select({ playerId: schema.playerInjuries.playerId })
+    .from(schema.playerInjuries)
+    .where(eq(schema.playerInjuries.source, "yahoo"));
+  const fromYahoo = new Set(yahooRows.map((r) => r.playerId));
+  const espn = injured.filter((i) => !fromYahoo.has(i.playerId));
+  for (const i of espn) {
+    await db
+      .insert(schema.playerInjuries)
+      .values({ playerId: i.playerId, status: i.status, source: "espn", updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: schema.playerInjuries.playerId,
+        set: { status: i.status, source: "espn", updatedAt: new Date() },
+      });
+  }
+  const keep = espn.map((i) => i.playerId);
+  await db
+    .delete(schema.playerInjuries)
+    .where(
+      and(
+        eq(schema.playerInjuries.source, "espn"),
+        keep.length ? notInArray(schema.playerInjuries.playerId, keep) : sql`true`,
+      ),
+    );
+  return { rowsWritten: roster.length, note: `${espn.length} injured` };
 }
 
 /** After box scores: season / last-14 / last-7 per-game windows for every player who has played. */

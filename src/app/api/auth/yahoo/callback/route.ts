@@ -1,7 +1,8 @@
+import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb, schema } from "@/db";
 import { exchangeCode, fetchGuid, saveTokens } from "@/lib/yahoo/oauth";
-import { setSessionCookie } from "@/lib/session";
+import { LOCAL_OWNER_GUID, setSessionCookie } from "@/lib/session";
 import { optionalEnv } from "@/lib/env";
 
 function fail(req: NextRequest, reason: string) {
@@ -9,14 +10,6 @@ function fail(req: NextRequest, reason: string) {
 }
 
 export async function GET(req: NextRequest) {
-  // TEMPORARY debugging aid: with state=debug, show the code instead of using it,
-  // so it can be exchanged and tested from another machine. The code is useless
-  // without the client secret. Remove once Yahoo sign-in works.
-  if (req.nextUrl.searchParams.get("state") === "debug") {
-    return new NextResponse(`code: ${req.nextUrl.searchParams.get("code") ?? "(none)"}`, {
-      headers: { "Content-Type": "text/plain" },
-    });
-  }
   try {
     return await signIn(req);
   } catch (err) {
@@ -39,6 +32,12 @@ async function signIn(req: NextRequest) {
   // Only one Yahoo account may use the app: ALLOWED_YAHOO_GUID, or else the first account that signed in.
   const allowed = optionalEnv("ALLOWED_YAHOO_GUID");
   const [existing] = await db.select().from(schema.users).limit(1);
+
+  // An owner created by password sign-in gets this Yahoo account linked on the first Yahoo sign-in.
+  if (existing?.yahooGuid === LOCAL_OWNER_GUID && (!allowed || guid === allowed)) {
+    await db.update(schema.users).set({ yahooGuid: guid }).where(eq(schema.users.id, existing.id));
+    existing.yahooGuid = guid;
+  }
 
   if (allowed ? guid !== allowed : existing && existing.yahooGuid !== guid) {
     return fail(req, "This Yahoo account is not allowed to use this app");

@@ -97,19 +97,22 @@ export async function loadLeagueContext(
     .from(schema.freeAgentSnapshots)
     .where(eq(schema.freeAgentSnapshots.leagueId, leagueId));
   const rosteredIds = new Set(roster.map((r) => r.playerId));
-  const freeAgents = takenAt
-    ? (
-        await db
-          .select({
-            playerId: schema.freeAgentSnapshots.playerId,
-            status: schema.freeAgentSnapshots.status,
-            percentOwned: schema.freeAgentSnapshots.percentOwned,
-            yahooRank: schema.freeAgentSnapshots.yahooRank,
-          })
-          .from(schema.freeAgentSnapshots)
-          .where(and(eq(schema.freeAgentSnapshots.leagueId, leagueId), eq(schema.freeAgentSnapshots.takenAt, new Date(takenAt))))
-      ).filter((f) => !rosteredIds.has(f.playerId))
-    : [];
+  let freeAgents: LeagueContext["freeAgents"] = [];
+  if (league.source === "manual") {
+    freeAgents = await manualFreeAgents(rosteredIds);
+  } else if (takenAt) {
+    freeAgents = (
+      await db
+        .select({
+          playerId: schema.freeAgentSnapshots.playerId,
+          status: schema.freeAgentSnapshots.status,
+          percentOwned: schema.freeAgentSnapshots.percentOwned,
+          yahooRank: schema.freeAgentSnapshots.yahooRank,
+        })
+        .from(schema.freeAgentSnapshots)
+        .where(and(eq(schema.freeAgentSnapshots.leagueId, leagueId), eq(schema.freeAgentSnapshots.takenAt, new Date(takenAt))))
+    ).filter((f) => !rosteredIds.has(f.playerId));
+  }
 
   const ids = [...new Set([...roster.map((r) => r.playerId), ...freeAgents.map((f) => f.playerId)])];
   const players = await valuePlayers(ids, rosteredIds, rules, settings, date, opts.categoryWeights);
@@ -127,6 +130,21 @@ export async function loadLeagueContext(
     players,
     date,
   };
+}
+
+/** Manual leagues have no free agent list: every active player with a projection who is on no team. */
+async function manualFreeAgents(rosteredIds: Set<number>): Promise<LeagueContext["freeAgents"]> {
+  const db = getDb();
+  const [{ asOf }] = await db.select({ asOf: max(schema.playerProjections.asOfDate) }).from(schema.playerProjections);
+  if (!asOf) return [];
+  const rows = await db
+    .selectDistinct({ playerId: schema.playerProjections.playerId })
+    .from(schema.playerProjections)
+    .innerJoin(schema.players, eq(schema.players.id, schema.playerProjections.playerId))
+    .where(and(eq(schema.playerProjections.asOfDate, asOf), eq(schema.players.isActive, true)));
+  return rows
+    .filter((r) => !rosteredIds.has(r.playerId))
+    .map((r) => ({ playerId: r.playerId, status: "FA", percentOwned: null, yahooRank: null }));
 }
 
 /** Blends projections with the league's window weights and values each player. */

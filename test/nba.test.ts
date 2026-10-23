@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCdnBoxScore, parseCdnSchedule, parseEspnBoxScore, parseEspnSchedule, parseIsoMinutes } from "@/lib/nba/client";
+import { parseCdnBoxScore, parseCdnSchedule, parseEspnBoxScore, parseEspnRoster, parseEspnSchedule, parseIsoMinutes } from "@/lib/nba/client";
 import { matchPlayer, normalizeName, nbaTeamAbbr } from "@/lib/players/match";
 
 describe("NBA CDN parsing", () => {
@@ -151,5 +151,19 @@ describe("ESPN parsing", () => {
       dnpReason: null,
     });
     expect(lines[1]).toMatchObject({ minutes: 0, dnpReason: "COACH'S DECISION" });
+  });
+});
+
+describe("ESPN rosters", () => {
+  it("maps positions, tricodes and injuries", () => {
+    const players = parseEspnRoster({
+      team: { abbreviation: "GS" },
+      athletes: [
+        { id: "6589", fullName: "Draymond Green", position: { abbreviation: "F" }, injuries: [] },
+        { id: "1", fullName: "Hurt Guard", position: { abbreviation: "G" }, injuries: [{ status: "Day-To-Day" }] },
+      ],
+    });
+    expect(players[0]).toEqual({ nbaPlayerId: 6589, name: "Draymond Green", teamAbbr: "GSW", positions: ["SF", "PF"], injuryStatus: null });
+    expect(players[1]).toMatchObject({ positions: ["PG", "SG"], injuryStatus: "Day-To-Day" });
   });
 });

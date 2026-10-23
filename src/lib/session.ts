@@ -4,6 +4,9 @@ import { env } from "./env";
 import { hmac, safeEqual } from "./crypto";
 
 const COOKIE = "nfa_session";
+
+/** Placeholder guid for an owner created by password sign-in, until a Yahoo account is linked. */
+export const LOCAL_OWNER_GUID = "local:owner";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 export function signSession(userId: number, now = Date.now()): string {
