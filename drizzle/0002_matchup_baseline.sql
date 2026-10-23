@@ -1,0 +1,1 @@
+ALTER TABLE "matchups" ADD COLUMN "baseline_through" date;

@@ -4,6 +4,7 @@ import { getDb, schema } from "@/db";
 import { HttpError } from "../api";
 import { today } from "../dates";
 import { normalizeSlot } from "../rules/schema";
+import { teamsPlayingByDay } from "./model";
 
 export interface RosterInput {
   playerId: number;
@@ -49,6 +50,55 @@ export async function assertPlayersAvailable(leagueId: number, teamId: number, p
       ),
     );
   if (taken.length) throw new HttpError(400, `Already on another team: ${taken.map((t) => `${t.name} (${t.team})`).join(", ")}`);
+}
+
+/** Players whose game today has already tipped off (their slot is locked for today). */
+async function startedToday(playerIds: number[], now = new Date()): Promise<Set<number>> {
+  if (playerIds.length === 0) return new Set();
+  const day = today();
+  const games = (await teamsPlayingByDay([day])).get(day)!;
+  const rows = await getDb()
+    .select({ id: schema.players.id, teamId: schema.players.nbaTeamId })
+    .from(schema.players)
+    .where(inArray(schema.players.id, playerIds));
+  const out = new Set<number>();
+  for (const r of rows) {
+    const tip = r.teamId ? games.get(r.teamId)?.tipTime : null;
+    if (tip && tip <= now) out.add(r.id);
+  }
+  return out;
+}
+
+/**
+ * Applies Yahoo's lock: a player can only change slots, or join a team's
+ * active lineup, until his own game tips off. After that, his slot for today
+ * stays as it was and a newly added player sits on the bench today.
+ * Returns the roster to save plus a note for each locked change.
+ */
+export async function applyTipOffLock(teamId: number, players: RosterInput[]): Promise<{ players: RosterInput[]; locked: string[] }> {
+  const before = new Map((await currentTeamRoster(teamId)).map((r) => [r.playerId, r.slot]));
+  const started = await startedToday(players.map((p) => p.playerId));
+  if (started.size === 0) return { players, locked: [] };
+  const names = new Map(
+    (
+      await getDb()
+        .select({ id: schema.players.id, name: schema.players.fullName })
+        .from(schema.players)
+        .where(inArray(schema.players.id, [...started]))
+    ).map((r) => [r.id, r.name]),
+  );
+  const locked: string[] = [];
+  const out = players.map((p) => {
+    if (!started.has(p.playerId)) return p;
+    const wanted = normalizeSlot(p.slot) ?? "BN";
+    const was = before.get(p.playerId);
+    const slot = was ?? "BN";
+    if (slot !== wanted) {
+      locked.push(`${names.get(p.playerId)}: game already started, stays at ${slot} today`);
+    }
+    return { ...p, slot };
+  });
+  return { players: out, locked };
 }
 
 /**

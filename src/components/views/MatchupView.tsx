@@ -10,7 +10,7 @@ type Result =
       kind: "categories";
       week: number;
       opponentName: string | null;
-      categories: { key: string; mine: number; opponent: number; state: "winning" | "losing" | "close"; decided: boolean }[];
+      categories: { key: string; mine: number; opponent: number; mineSoFar: number; opponentSoFar: number; state: "winning" | "losing" | "close"; decided: boolean }[];
     }
   | {
       kind: "points";
@@ -32,6 +32,7 @@ interface Manual {
   opponentStats: Record<string, number>;
   myPoints: number | null;
   opponentPoints: number | null;
+  baselineThrough: string | null;
 }
 
 const fmt = (key: string, v: number) =>
@@ -108,8 +109,10 @@ function Projection({ r, manual, punted }: { r: Result | null; manual: boolean; 
           <thead>
             <tr>
               <th>Category</th>
-              <th className="text-right">You</th>
-              <th className="text-right">Them</th>
+              <th className="text-right">You so far</th>
+              <th className="text-right">Them so far</th>
+              <th className="text-right">You (projected)</th>
+              <th className="text-right">Them (projected)</th>
               <th>Outlook</th>
             </tr>
           </thead>
@@ -119,6 +122,8 @@ function Projection({ r, manual, punted }: { r: Result | null; manual: boolean; 
                 <td className="font-medium">
                   {c.key} {punted.includes(c.key) && <Badge>punted</Badge>}
                 </td>
+                <td className="text-right text-slate-500 tabular-nums">{fmt(c.key, c.mineSoFar)}</td>
+                <td className="text-right text-slate-500 tabular-nums">{fmt(c.key, c.opponentSoFar)}</td>
                 <td className="text-right tabular-nums">{fmt(c.key, c.mine)}</td>
                 <td className="text-right tabular-nums">{fmt(c.key, c.opponent)}</td>
                 <td>
@@ -146,6 +151,7 @@ function ManualSetup({ leagueId, manual, open }: { leagueId: number; manual: Man
   const [theirs, setTheirs] = useState<Record<string, string>>(() => toText(manual.opponentStats));
   const [myPoints, setMyPoints] = useState(manual.myPoints?.toString() ?? "");
   const [oppPoints, setOppPoints] = useState(manual.opponentPoints?.toString() ?? "");
+  const [through, setThrough] = useState(manual.baselineThrough ?? yesterdayEastern());
   const save = useMutation({
     mutationFn: () =>
       api(`/api/leagues/${leagueId}/matchup`, {
@@ -156,6 +162,7 @@ function ManualSetup({ leagueId, manual, open }: { leagueId: number; manual: Man
           opponentStats: toNumbers(theirs),
           myPoints: myPoints === "" ? null : Number(myPoints),
           opponentPoints: oppPoints === "" ? null : Number(oppPoints),
+          throughDate: through,
         }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["league", leagueId] }),
@@ -188,9 +195,21 @@ function ManualSetup({ leagueId, manual, open }: { leagueId: number; manual: Man
             </label>
           )}
           <p className="text-xs text-slate-500">
-            Stats so far this week, copied from Yahoo&apos;s matchup page (leave blank on the first day). Ratios use makes and attempts,
-            like FGM and FGA.
+            Optional: totals from Yahoo&apos;s matchup page through the end of a day. Days after that are counted automatically from box
+            scores: your saved lineup for you, the best possible lineup for your opponent. Leave blank to count the whole week
+            automatically. Ratios use makes and attempts, like FGM and FGA.
           </p>
+          <label className="flex items-center gap-2 text-sm">
+            Totals through the end of (US Eastern)
+            <input
+              type="date"
+              className="input w-auto py-1"
+              value={through}
+              min={manual.week.start}
+              max={manual.week.end}
+              onChange={(e) => setThrough(e.target.value)}
+            />
+          </label>
           <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
@@ -254,4 +273,9 @@ function toNumbers(values: Record<string, string>): Record<string, number> {
       .filter(([, v]) => v.trim() !== "" && Number.isFinite(Number(v)))
       .map(([k, v]) => [k, Number(v)]),
   );
+}
+
+function yesterdayEastern(): string {
+  const d = new Date(Date.now() - 86400000);
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }

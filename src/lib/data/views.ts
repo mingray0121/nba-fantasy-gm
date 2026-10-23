@@ -1,5 +1,5 @@
 /** Read models behind the pages. Each takes one league and computes from what the jobs stored. */
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import {
   currentWeek,
@@ -15,8 +15,8 @@ import { matchupWeights, projectCategories, toDateInputs, type CategoryProjectio
 import { suggestAddDrops, type AddDropPlayer } from "../engine/addDrop";
 import { computeWindows, blendWindows, DEFAULT_WEIGHTS } from "../engine/projections";
 import { pointsValue, round } from "../engine/values";
-import { INJURED_SLOTS, type Slot } from "../rules/schema";
-import { addLines, EMPTY_LINE, scaleLine, type StatLine } from "../stats";
+import { ACTIVE_SLOTS, INJURED_SLOTS, type Slot } from "../rules/schema";
+import { addLines, COUNTING_STATS, EMPTY_LINE, scaleLine, type CountingStatKey, type StatLine } from "../stats";
 import { addDays, today } from "../dates";
 
 /* ------------------------------------------------------------------ */
@@ -175,16 +175,28 @@ export async function weekView(leagueId: number, date = today()) {
 /* ------------------------------------------------------------------ */
 
 type MatchupResult =
-  | { kind: "categories"; week: number; categories: CategoryProjection[]; opponentName: string | null }
+  | {
+      kind: "categories";
+      week: number;
+      categories: CategoryProjection[];
+      opponentName: string | null;
+      myToDate: Record<string, number>;
+      oppToDate: Record<string, number>;
+    }
   | { kind: "points"; week: number; mine: number; opponent: number; mineToDate: number; opponentToDate: number; opponentName: string | null };
 
-/** Sum of projected stat lines for a team's optimized starters over the remaining days. */
+/**
+ * Sum of projected stat lines for a team's optimized starters over the remaining days.
+ * Today only counts games that haven't tipped off; started games count once final.
+ */
 async function projectRemaining(ctx: LeagueContext, teamId: number, days: string[]): Promise<StatLine> {
   const byDay = await teamsPlayingByDay(days);
   let total = { ...EMPTY_LINE };
   const now = today();
+  const nowTime = new Date();
   for (const day of days) {
-    const games = byDay.get(day)!;
+    let games = byDay.get(day)!;
+    if (day === now) games = new Map([...games].filter(([, g]) => !g.tipTime || g.tipTime > nowTime));
     const lp = lineupPlayers(ctx, teamId, games, day === now);
     const res = optimizeLineup(lp, ctx.rules.roster_slots);
     for (const [playerId, slot] of res.assignments) {
@@ -194,6 +206,107 @@ async function projectRemaining(ctx: LeagueContext, teamId: number, days: string
     }
   }
   return total;
+}
+
+/** Each day's roster for a team: its latest saved roster on or before that day. */
+async function rostersOnDays(leagueId: number, teamId: number, days: string[]) {
+  const out = new Map<string, { playerId: number; slot: string }[]>();
+  if (days.length === 0) return out;
+  const db = getDb();
+  const dates = (
+    await db
+      .selectDistinct({ date: schema.rosterEntries.date })
+      .from(schema.rosterEntries)
+      .where(and(eq(schema.rosterEntries.fantasyTeamId, teamId), lte(schema.rosterEntries.date, days[days.length - 1])))
+  )
+    .map((r) => r.date)
+    .sort();
+  const pick = (day: string) => dates.filter((d) => d <= day).at(-1);
+  const needed = [...new Set(days.map(pick).filter((d): d is string => Boolean(d)))];
+  const rows = needed.length
+    ? await db
+        .select({ date: schema.rosterEntries.date, playerId: schema.rosterEntries.playerId, slot: schema.rosterEntries.slot })
+        .from(schema.rosterEntries)
+        .where(
+          and(
+            eq(schema.rosterEntries.leagueId, leagueId),
+            eq(schema.rosterEntries.fantasyTeamId, teamId),
+            inArray(schema.rosterEntries.date, needed),
+          ),
+        )
+    : [];
+  for (const day of days) {
+    const d = pick(day);
+    out.set(day, d ? rows.filter((r) => r.date === d) : []);
+  }
+  return out;
+}
+
+/**
+ * A team's actual stats over past days from box scores, counting only players
+ * in an active slot that day. "best" picks each day's optimal lineup instead
+ * of the saved slots (for opponents whose daily lineups aren't recorded).
+ */
+async function statsOnDays(ctx: LeagueContext, teamId: number, days: string[], lineups: "saved" | "best"): Promise<StatLine> {
+  let total = { ...EMPTY_LINE };
+  if (days.length === 0) return total;
+  const rosters = await rostersOnDays(ctx.league.id, teamId, days);
+  const ids = [...new Set([...rosters.values()].flat().map((r) => r.playerId))];
+  if (ids.length === 0) return total;
+  const logs = await getDb()
+    .select()
+    .from(schema.playerGameLogs)
+    .where(
+      and(
+        inArray(schema.playerGameLogs.playerId, ids),
+        gte(schema.playerGameLogs.gameDate, days[0]),
+        lte(schema.playerGameLogs.gameDate, days[days.length - 1]),
+      ),
+    );
+  const logOf = new Map(logs.map((l) => [`${l.playerId}:${l.gameDate}`, l]));
+  const byDay = lineups === "best" ? await teamsPlayingByDay(days) : null;
+  for (const day of days) {
+    const roster = rosters.get(day) ?? [];
+    let active: number[];
+    if (byDay) {
+      const games = byDay.get(day)!;
+      const lp: LineupPlayer[] = roster.map((r) => {
+        const p = ctx.players.get(r.playerId);
+        const hasGame = !!p?.nbaTeamId && games.has(p.nbaTeamId) && logOf.has(`${r.playerId}:${day}`);
+        return {
+          playerId: r.playerId,
+          positions: p?.positions ?? [],
+          value: hasGame ? (p?.valuePerGame ?? 0) : 0,
+          hasGame,
+          onInjuredList: INJURED_SLOTS.includes(r.slot as Slot),
+        };
+      });
+      const res = optimizeLineup(lp, ctx.rules.roster_slots);
+      active = [...res.assignments].filter(([, slot]) => slot !== "BN" && slot !== "IL").map(([id]) => id);
+    } else {
+      active = roster.filter((r) => ACTIVE_SLOTS.includes(r.slot as Slot)).map((r) => r.playerId);
+    }
+    for (const id of active) {
+      const log = logOf.get(`${id}:${day}`);
+      if (!log) continue;
+      const line = { ...EMPTY_LINE };
+      for (const k of Object.keys(EMPTY_LINE) as (keyof StatLine)[]) if (k !== "dd" && k !== "td") line[k] = log[k];
+      const doubles = [log.pts, log.reb, log.ast, log.stl, log.blk].filter((v) => v >= 10).length;
+      line.dd = doubles >= 2 ? 1 : 0;
+      line.td = doubles >= 3 ? 1 : 0;
+      total = addLines(total, line);
+    }
+  }
+  return total;
+}
+
+/** Baseline totals plus counted stats, keyed like Yahoo's to-date stats (counting keys). */
+function mergeToDate(baseline: Record<string, number>, line: StatLine): Record<string, number> {
+  const out: Record<string, number> = { ...baseline };
+  for (const key of Object.keys(COUNTING_STATS) as CountingStatKey[]) {
+    out[key] = (baseline[key] ?? 0) + line[COUNTING_STATS[key]];
+  }
+  return out;
 }
 
 export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResult | null> {
@@ -213,9 +326,33 @@ export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResu
   const mine = await projectRemaining(ctx, ctx.myTeam.id, days);
   const opp = await projectRemaining(ctx, m.opponentTeamId, days);
 
+  // Manual leagues: stats so far = the entered baseline (through baselineThrough) plus box scores
+  // of each later day's active players. Yahoo leagues get their stats so far from Yahoo.
+  let myToDate: Record<string, number> = m.statsToDate;
+  let oppToDate: Record<string, number> = m.opponentStatsToDate;
+  let myPointsToDate = m.pointsToDate ?? 0;
+  let oppPointsToDate = m.opponentPointsToDate ?? 0;
+  if (ctx.league.source === "manual") {
+    // A side with no entered totals is counted from the start of the week.
+    const last = ctx.date < end ? ctx.date : end;
+    const daysAfter = (hasBaseline: boolean) => {
+      const out: string[] = [];
+      for (let d = hasBaseline && m.baselineThrough ? addDays(m.baselineThrough, 1) : start; d <= last; d = addDays(d, 1)) out.push(d);
+      return out;
+    };
+    const myBase = Object.keys(m.statsToDate).length > 0 || m.pointsToDate != null;
+    const oppBase = Object.keys(m.opponentStatsToDate).length > 0 || m.opponentPointsToDate != null;
+    const myLine = await statsOnDays(ctx, ctx.myTeam.id, daysAfter(myBase), "saved");
+    const oppLine = await statsOnDays(ctx, m.opponentTeamId, daysAfter(oppBase), "best");
+    myToDate = mergeToDate(m.statsToDate, myLine);
+    oppToDate = mergeToDate(m.opponentStatsToDate, oppLine);
+    myPointsToDate += pointsValue(myLine, ctx.rules.point_weights);
+    oppPointsToDate += pointsValue(oppLine, ctx.rules.point_weights);
+  }
+
   if (ctx.rules.scoring_type === "h2h_points") {
-    const mineToDate = m.pointsToDate ?? 0;
-    const oppToDate = m.opponentPointsToDate ?? 0;
+    const mineToDate = round(myPointsToDate, 1);
+    const oppToDate = round(oppPointsToDate, 1);
     return {
       kind: "points",
       week: m.week,
@@ -230,10 +367,12 @@ export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResu
     kind: "categories",
     week: m.week,
     opponentName: opponent?.name ?? null,
+    myToDate,
+    oppToDate,
     categories: projectCategories({
       categories: ctx.rules.categories,
-      myToDate: m.statsToDate,
-      oppToDate: m.opponentStatsToDate,
+      myToDate,
+      oppToDate,
       myRemaining: mine,
       oppRemaining: opp,
       weekFractionLeft: days.length / totalDays,
@@ -261,6 +400,7 @@ export async function matchupView(leagueId: number) {
       opponentStats: current?.opponentStatsToDate ?? {},
       myPoints: current?.pointsToDate ?? null,
       opponentPoints: current?.opponentPointsToDate ?? null,
+      baselineThrough: current?.baselineThrough ?? null,
     };
   }
   return { result, punted: ctx.settings.puntCategories, manual };

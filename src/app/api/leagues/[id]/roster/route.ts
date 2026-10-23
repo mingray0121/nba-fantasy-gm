@@ -6,7 +6,7 @@ import { handler, HttpError, requireLeague } from "@/lib/api";
 import { runJob } from "@/lib/jobs/registry";
 import { today } from "@/lib/dates";
 import { teamsPlayingByDay } from "@/lib/data/model";
-import { assertPlayersAvailable, replaceTeamRoster } from "@/lib/data/roster";
+import { applyTipOffLock, assertPlayersAvailable, replaceTeamRoster } from "@/lib/data/roster";
 
 type Ctx = { params: Promise<{ id: string }> };
 type League = Awaited<ReturnType<typeof requireLeague>>;
@@ -80,7 +80,8 @@ export const PUT = handler(async (req: Request, { params }: Ctx) => {
       await db.update(schema.players).set({ eligiblePositions: p.positions }).where(eq(schema.players.id, p.playerId));
     }
   }
-  await replaceTeamRoster(league.id, team.id, players);
+  const { players: toSave, locked } = await applyTipOffLock(team.id, players);
+  await replaceTeamRoster(league.id, team.id, toSave);
   const runs = await runJob("values", league.id);
-  return NextResponse.json({ ok: true, runs });
+  return NextResponse.json({ ok: true, locked, runs });
 });

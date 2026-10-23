@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { ErrorBox, Loading, PageTitle } from "../ui";
 import { useTimeZone } from "../timezone";
+import { LockedNotice } from "./RosterView";
 
 interface Data {
   week: { start: string; end: string };
@@ -55,7 +56,7 @@ export function TransactionsView({ leagueId }: { leagueId: number }) {
   });
   const move = useMutation({
     mutationFn: () =>
-      api(`/api/leagues/${leagueId}/transactions`, {
+      api<{ locked: string[] }>(`/api/leagues/${leagueId}/transactions`, {
         method: "POST",
         body: JSON.stringify({ teamId, addPlayerId: add?.id, dropPlayerId: drop === "" ? undefined : drop }),
       }),
@@ -144,6 +145,7 @@ export function TransactionsView({ leagueId }: { leagueId: number }) {
           </div>
           <div className="md:col-span-2">
             {move.error && <ErrorBox error={move.error} />}
+            {move.data?.locked.length ? <LockedNotice notes={move.data.locked} /> : null}
             <button className="btn-primary" disabled={move.isPending || (!add && drop === "")} onClick={() => move.mutate()}>
               {move.isPending ? "Saving…" : `Save move for ${team.name}`}
             </button>

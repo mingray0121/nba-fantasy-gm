@@ -210,6 +210,8 @@ export const matchups = pgTable(
       .default({}),
     pointsToDate: real("points_to_date"),
     opponentPointsToDate: real("opponent_points_to_date"),
+    // Manual leagues: statsToDate covers games through this date; later days are added from box scores.
+    baselineThrough: date("baseline_through"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("matchups_league_week_team").on(t.leagueId, t.week, t.teamId)],

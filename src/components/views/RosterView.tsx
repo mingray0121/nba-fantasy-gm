@@ -148,7 +148,7 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
   });
   const save = useMutation({
     mutationFn: () =>
-      api(`/api/leagues/${leagueId}/roster`, {
+      api<{ locked: string[] }>(`/api/leagues/${leagueId}/roster`, {
         method: "PUT",
         body: JSON.stringify({
           teamId: team.id,
@@ -279,9 +279,24 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
         );
       })}
       {(current.error || save.error) && <ErrorBox error={current.error ?? save.error} />}
+      {save.data?.locked.length ? <LockedNotice notes={save.data.locked} /> : null}
       <button className="btn-primary mt-3" disabled={save.isPending || entries === null} onClick={() => save.mutate()}>
         {save.isPending ? "Saving…" : `Save ${team.name}`}
       </button>
     </>
+  );
+}
+
+/** Players whose game had started keep today's slot (Yahoo locks each player at tip-off). */
+export function LockedNotice({ notes }: { notes: string[] }) {
+  return (
+    <div className="card mt-3 border-amber-200 p-3 text-sm text-amber-800 dark:border-amber-900 dark:text-amber-300">
+      <p className="font-medium">Some changes start tomorrow:</p>
+      <ul className="list-disc pl-5">
+        {notes.map((n) => (
+          <li key={n}>{n}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

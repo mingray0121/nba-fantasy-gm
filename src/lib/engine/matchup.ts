@@ -1,4 +1,5 @@
 import {
+  EMPTY_LINE,
   PERCENT_STATS,
   categoryValue,
   isNegativeCategory,
@@ -16,6 +17,8 @@ export interface CategoryProjection {
   key: string;
   mine: number;
   opponent: number;
+  mineSoFar: number;
+  opponentSoFar: number;
   state: CategoryState;
   decided: boolean; // margin big enough that more effort barely matters
 }
@@ -59,6 +62,8 @@ export function projectCategories(input: {
       key,
       mine: round(mine, 4),
       opponent: round(opponent, 4),
+      mineSoFar: round(finalValue(key, input.myToDate, EMPTY_LINE, 0, custom), 4),
+      opponentSoFar: round(finalValue(key, input.oppToDate, EMPTY_LINE, 0, custom), 4),
       state,
       decided: Math.abs(margin) >= decidedAt,
     };
