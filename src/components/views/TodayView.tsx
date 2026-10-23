@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { fmtTipTime, useTimeZone } from "../timezone";
-import { Badge, Empty, ErrorBox, Loading, PageTitle, StatusBadge } from "../ui";
+import { Badge, Empty, ErrorBox, Loading, PageTitle, SlotPill, StatusBadge } from "../ui";
 import type { LineupRow } from "@/lib/data/views";
 
 interface Lineup {
@@ -66,19 +66,25 @@ export function TodayView({ leagueId }: { leagueId: number }) {
       {q.data && q.data.rows.length === 0 && <Empty>No roster yet. Press Refresh to pull it from Yahoo.</Empty>}
       {q.data && q.data.rows.length > 0 && (
         <>
-          <div className="card mb-4 p-4 text-sm">
+          <div className={`card mb-6 border-l-4 p-5 ${changes.length ? "border-l-ember-500" : "border-l-emerald-500"}`}>
             {changes.length === 0 ? (
-              <p>Your current lineup is already the best one for this day.</p>
+              <p className="text-sm">
+                <span className="font-medium">You&apos;re set.</span>{" "}
+                <span className="text-slate-500">Your lineup is already the best one for this day.</span>
+              </p>
             ) : (
               <>
-                <p className="font-medium">
-                  {changes.length} change{changes.length > 1 ? "s" : ""} to make in Yahoo:
+                <p className="text-sm font-medium">
+                  {changes.length} change{changes.length > 1 ? "s" : ""} to make in Yahoo
                 </p>
-                <ul className="mt-1 list-disc pl-5">
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                   {changes.map((r) => (
-                    <li key={r.playerId}>
-                      {r.action === "start" ? "Start" : "Bench"} <strong>{r.name}</strong>
-                      {r.action === "start" ? ` at ${r.recommendedSlot}` : ""} (now {r.currentSlot})
+                    <li key={r.playerId} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
+                      <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "Start" : "Bench"}</Badge>
+                      <span className="font-medium">{r.name}</span>
+                      <span className="ml-auto flex items-center gap-1 text-xs text-slate-500">
+                        <SlotPill slot={r.currentSlot} muted />→<SlotPill slot={r.action === "start" ? r.recommendedSlot : "BN"} />
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -103,8 +109,8 @@ export function TodayView({ leagueId }: { leagueId: number }) {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.playerId}>
-                        <td className="font-mono text-xs">
-                          {r.recommendedSlot}
+                        <td>
+                          <SlotPill slot={r.recommendedSlot} />
                           {r.action !== "keep" && (
                             <div className="mt-0.5">
                               <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "start" : "bench"}</Badge>
@@ -131,7 +137,9 @@ export function TodayView({ leagueId }: { leagueId: number }) {
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="text-right tabular-nums">{r.value.toFixed(2)}</td>
+                        <td className={`text-right font-medium tabular-nums ${r.value < 0 ? "text-slate-400" : ""}`}>
+                          {r.value.toFixed(2)}
+                        </td>
                         <td className="hidden text-xs text-slate-500 md:table-cell">{r.reason}</td>
                       </tr>
                     ))}

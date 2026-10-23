@@ -15,8 +15,18 @@ type Category = {
   decided: boolean;
 };
 
+type Pair = [number, number];
+const pair = ([made, att]: Pair) => `${made}/${att}`;
+
 type Result =
-  | { kind: "categories"; week: number; teamName: string | null; opponentName: string | null; categories: Category[] }
+  | {
+      kind: "categories";
+      week: number;
+      teamName: string | null;
+      opponentName: string | null;
+      categories: Category[];
+      reference: { category: string; label: string; mineSoFar: Pair; opponentSoFar: Pair; mine: Pair; opponent: Pair }[];
+    }
   | {
       kind: "points";
       week: number;
@@ -75,7 +85,9 @@ export function MatchupView({ leagueId }: { leagueId: number }) {
     <>
       <PageTitle
         title={week ? `Week ${week} matchups` : "Matchups"}
-        subtitle={manual ? `${manual.week.start} to ${manual.week.end}. Stats so far plus projected starts for the rest of the week.` : undefined}
+        subtitle={
+          manual ? `${manual.week.start} to ${manual.week.end}. Stats so far plus projected starts for the rest of the week.` : undefined
+        }
         actions={
           manual && free.length >= 2 && !adding ? (
             <button className="btn-secondary" onClick={() => setAdding(true)}>
@@ -94,7 +106,9 @@ export function MatchupView({ leagueId }: { leagueId: number }) {
         />
       )}
       {matchups.length === 0 && !adding && (
-        <Empty>{manual ? "No matchups yet. Add this week's matchups above." : "No matchup this week yet (or it hasn't synced). Press Refresh."}</Empty>
+        <Empty>
+          {manual ? "No matchups yet. Add this week's matchups above." : "No matchup this week yet (or it hasn't synced). Press Refresh."}
+        </Empty>
       )}
       {matchups.map((m) => (
         <MatchupCard
@@ -108,8 +122,8 @@ export function MatchupView({ leagueId }: { leagueId: number }) {
       ))}
       {matchups.some((m) => m.result.kind === "categories") && (
         <p className="mt-2 text-xs text-slate-500">
-          Your team&apos;s days so far use your saved lineups; other teams&apos; days use their best possible lineup. With matchup-aware weighting
-          on, close categories in your matchup count 1.5× and decided ones 0.5× in today&apos;s start/bench values.
+          Your team&apos;s days so far use your saved lineups; other teams&apos; days use their best possible lineup. With matchup-aware
+          weighting on, close categories in your matchup count 1.5× and decided ones 0.5× in today&apos;s start/bench values.
         </p>
       )}
     </>
@@ -211,23 +225,77 @@ function CategoriesResult({ r, punted }: { r: Extract<Result, { kind: "categorie
   const close = r.categories.filter((c) => c.state === "close");
   return (
     <>
-      <p className="mb-2 text-sm text-slate-500">
-        {r.teamName} projected {won}-{lost}-{close.length} (win-loss-close). Close: {close.map((c) => c.key).join(", ") || "none"}.
-      </p>
+      <div className="card mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4 p-5">
+        <div className="min-w-0">
+          <div className="truncate font-semibold">{r.teamName}</div>
+          <div className="text-xs text-slate-500">projected wins</div>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl font-semibold tracking-tight tabular-nums">
+            <span className={won > lost ? "text-emerald-600" : ""}>{won}</span>
+            <span className="mx-2 text-slate-300">–</span>
+            <span className={lost > won ? "text-rose-600" : ""}>{lost}</span>
+            <span className="mx-2 text-slate-300">–</span>
+            <span className="text-amber-600">{close.length}</span>
+          </div>
+          <div className="mt-1 text-[11px] tracking-wider text-slate-400 uppercase">win · loss · close</div>
+        </div>
+        <div className="min-w-0 text-right">
+          <div className="truncate font-semibold">{r.opponentName}</div>
+          <div className="text-xs text-slate-500">
+            {close.length ? `Swing: ${close.map((c) => c.key).join(", ")}` : "No close categories"}
+          </div>
+        </div>
+      </div>
       <div className="card overflow-x-auto">
         <table className="table-base">
           <thead>
             <tr>
-              <th>Category</th>
-              <th className="text-right">{r.teamName} so far</th>
-              <th className="text-right">{r.opponentName} so far</th>
-              <th className="text-right">{r.teamName} projected</th>
-              <th className="text-right">{r.opponentName} projected</th>
-              <th>Outlook</th>
+              <th rowSpan={2} className="align-bottom">
+                Category
+              </th>
+              <th colSpan={2} className="border-l border-slate-100 text-center dark:border-slate-800">
+                So far
+              </th>
+              <th colSpan={2} className="border-l border-slate-100 text-center dark:border-slate-800">
+                Projected final
+              </th>
+              <th rowSpan={2} className="align-bottom">
+                Outlook
+              </th>
+            </tr>
+            <tr>
+              {[0, 1].map((n) => [
+                <th
+                  key={`a${n}`}
+                  className="max-w-32 truncate border-l border-slate-100 text-right normal-case dark:border-slate-800"
+                  title={r.teamName ?? ""}
+                >
+                  {r.teamName}
+                </th>,
+                <th key={`b${n}`} className="max-w-32 truncate text-right normal-case" title={r.opponentName ?? ""}>
+                  {r.opponentName}
+                </th>,
+              ])}
             </tr>
           </thead>
           <tbody>
-            {r.categories.map((c) => (
+            {r.categories.map((c) => [
+              ...r.reference
+                .filter((x) => x.category === c.key)
+                .map((x) => (
+                  <tr key={x.label} className="text-slate-500">
+                    <td>
+                      {x.label}
+                      <span className="ml-1 text-xs">*</span>
+                    </td>
+                    <td className="text-right tabular-nums">{pair(x.mineSoFar)}</td>
+                    <td className="text-right tabular-nums">{pair(x.opponentSoFar)}</td>
+                    <td className="text-right tabular-nums">{pair(x.mine)}</td>
+                    <td className="text-right tabular-nums">{pair(x.opponent)}</td>
+                    <td className="text-xs">not scored</td>
+                  </tr>
+                )),
               <tr key={c.key} className={punted.includes(c.key) ? "opacity-50" : ""}>
                 <td className="font-medium">
                   {c.key} {punted.includes(c.key) && <Badge>punted</Badge>}
@@ -238,13 +306,14 @@ function CategoriesResult({ r, punted }: { r: Extract<Result, { kind: "categorie
                 <td className="text-right tabular-nums">{fmt(c.key, c.opponent)}</td>
                 <td>
                   <Badge tone={c.state === "winning" ? "green" : c.state === "losing" ? "red" : "amber"}>{c.state}</Badge>{" "}
-                  {c.decided && <span className="text-xs text-slate-500">likely decided</span>}
+                  {c.decided && <span className="ml-1 text-[11px] whitespace-nowrap text-slate-400">likely decided</span>}
                 </td>
-              </tr>
-            ))}
+              </tr>,
+            ])}
           </tbody>
         </table>
       </div>
+      {r.reference.length > 0 && <p className="mt-1 text-xs text-slate-500">* For reference only, like Yahoo&apos;s non-scoring stats.</p>}
     </>
   );
 }
@@ -364,7 +433,12 @@ function MatchupForm({
                 <td className="text-sm whitespace-nowrap">{nameOf(row.id)}</td>
                 {isPoints ? (
                   <td>
-                    <input className="input w-24 py-1" inputMode="decimal" value={row.points} onChange={(e) => row.setPoints(e.target.value)} />
+                    <input
+                      className="input w-24 py-1"
+                      inputMode="decimal"
+                      value={row.points}
+                      onChange={(e) => row.setPoints(e.target.value)}
+                    />
                   </td>
                 ) : (
                   manual.inputs.map((k) => (

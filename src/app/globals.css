@@ -1,11 +1,34 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. A calm, warm-neutral base with one deep navy brand color and a
+ * small amount of court orange for emphasis. The slate scale is re-tuned so every
+ * page picks up the same neutrals.
+ */
 @theme {
-  --color-court-50: #f3f7fb;
-  --color-court-100: #e2ecf6;
-  --color-court-500: #2f6fae;
-  --color-court-600: #245a91;
-  --color-court-700: #1c4874;
+  --font-sans: var(--font-inter), "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+
+  --color-slate-50: #f8f8f6;
+  --color-slate-100: #f1f1ee;
+  --color-slate-200: #e4e3de;
+  --color-slate-300: #d2d0c9;
+  --color-slate-400: #a19f97;
+  --color-slate-500: #74726a;
+  --color-slate-600: #56544d;
+  --color-slate-700: #3e3d38;
+  --color-slate-800: #292825;
+  --color-slate-900: #1b1a18;
+  --color-slate-950: #121210;
+
+  --color-court-50: #f0f4f9;
+  --color-court-100: #dde6f1;
+  --color-court-500: #34588f;
+  --color-court-600: #254372;
+  --color-court-700: #1b3259;
+
+  --color-ember-400: #ee9a52;
+  --color-ember-500: #dd7a2e;
+  --color-ember-600: #bf6220;
 }
 
 :root {
@@ -14,30 +37,40 @@
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Numbers line up in every table and stat. */
+.tabular-nums,
+table {
+  font-variant-numeric: tabular-nums;
 }
 
 @utility card {
-  @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(20,20,15,0.04)] dark:border-slate-800 dark:bg-slate-900;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-court-500/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-court-600 text-white hover:bg-court-700;
+  @apply btn bg-court-600 text-white shadow-sm hover:bg-court-700 dark:bg-court-500 dark:hover:bg-court-600;
 }
 @utility btn-secondary {
-  @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  @apply btn border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 @utility input {
-  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900;
+  @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm transition-colors placeholder:text-slate-400 focus:border-court-500 focus:ring-2 focus:ring-court-500/15 focus:outline-none dark:border-slate-700 dark:bg-slate-900;
 }
 @utility table-base {
   @apply w-full text-left text-sm;
   & th {
-    @apply px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase;
+    @apply bg-slate-50/70 px-3 py-2.5 text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:bg-slate-900;
   }
   & td {
-    @apply border-t border-slate-100 px-3 py-2 dark:border-slate-800;
+    @apply border-t border-slate-100 px-3 py-2.5 dark:border-slate-800;
+  }
+  & tbody tr {
+    @apply transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/40;
   }
 }

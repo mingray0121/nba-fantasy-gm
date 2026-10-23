@@ -78,6 +78,51 @@ const TO_DATE_PARTS: Record<PercentStatKey, [StatKey, StatKey]> = {
   "A/T": ["AST", "TO"],
 };
 
+export interface ReferenceStat {
+  category: string; // the ratio category it belongs to, e.g. "FG%"
+  label: string; // e.g. "FGM/A"
+  mineSoFar: [number, number];
+  opponentSoFar: [number, number];
+  mine: [number, number];
+  opponent: [number, number];
+}
+
+/**
+ * Makes and attempts behind each ratio category (FGM/A for FG%, and so on), shown for
+ * reference like Yahoo's non-scoring columns. Pairs whose parts are both scored are skipped.
+ */
+export function referenceStats(input: {
+  categories: string[];
+  myToDate: ToDate;
+  oppToDate: ToDate;
+  myRemaining: StatLine;
+  oppRemaining: StatLine;
+  custom?: CustomStats;
+}): ReferenceStat[] {
+  const custom = input.custom ?? {};
+  const out: ReferenceStat[] = [];
+  for (const key of input.categories) {
+    const def = custom[key];
+    const parts = def && "ratio" in def ? def.ratio : key in TO_DATE_PARTS ? TO_DATE_PARTS[key as PercentStatKey] : null;
+    if (!parts || parts.every((p) => input.categories.includes(p))) continue;
+    const [made, att] = parts;
+    const so = (toDate: ToDate): [number, number] => [toDate[made] ?? 0, toDate[att] ?? 0];
+    const fin = (toDate: ToDate, rest: StatLine): [number, number] => [
+      Math.round((toDate[made] ?? 0) + categoryValue(rest, made, custom)),
+      Math.round((toDate[att] ?? 0) + categoryValue(rest, att, custom)),
+    ];
+    out.push({
+      category: key,
+      label: `${made}/${att.replace(/^(FG|FT|3P)/, "")}`, // FGM/A, FTM/A, 3PM/A
+      mineSoFar: so(input.myToDate),
+      opponentSoFar: so(input.oppToDate),
+      mine: fin(input.myToDate, input.myRemaining),
+      opponent: fin(input.oppToDate, input.oppRemaining),
+    });
+  }
+  return out;
+}
+
 /** The week-to-date numbers a matchup needs: makes and attempts for ratios, totals for everything else. */
 export function toDateInputs(categories: string[], custom: CustomStats = {}): string[] {
   const out: string[] = [];

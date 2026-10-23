@@ -42,14 +42,16 @@ export function LeagueNav({ league, leagues }: Props) {
   });
 
   return (
-    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-2">
-        <Link href="/leagues" className="text-sm font-semibold text-court-600">
-          Lineup Assistant
+    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/85">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-3 pb-2">
+        <Link href="/leagues" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <span className="grid size-6 place-items-center rounded-full bg-ember-500 text-[10px] font-bold text-white shadow-sm">GM</span>
+          <span className="hidden sm:inline">Lineup Assistant</span>
         </Link>
+        <span className="text-slate-300 dark:text-slate-700">/</span>
         <select
           aria-label="League"
-          className="input w-auto max-w-[14rem] py-1"
+          className="input w-auto max-w-[16rem] border-transparent bg-transparent py-1 font-medium hover:border-slate-200 dark:bg-transparent"
           value={league.id}
           onChange={(e) => router.push(`/leagues/${e.target.value}/${section}`)}
         >
@@ -61,19 +63,21 @@ export function LeagueNav({ league, leagues }: Props) {
         </select>
         <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
           <TimeZoneToggle />
-          <span className="hidden sm:inline">Updated {timeAgo(league.lastSyncAt)}</span>
-          <button className="btn-secondary py-1" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+          <span className="hidden md:inline">Updated {timeAgo(league.lastSyncAt)}</span>
+          <button className="btn-secondary px-3 py-1.5 text-xs" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
             {refresh.isPending ? "Refreshing…" : "Refresh"}
           </button>
         </div>
       </div>
-      <nav className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 pb-2">
+      <nav className="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-4">
         {tabs.map(([slug, label]) => (
           <Link
             key={slug}
             href={`${base}/${slug}`}
-            className={`rounded-md px-3 py-1.5 text-sm whitespace-nowrap ${
-              section === slug ? "bg-court-600 text-white" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            className={`-mb-px border-b-2 py-2.5 text-sm whitespace-nowrap transition-colors ${
+              section === slug
+                ? "border-ember-500 font-medium text-slate-900 dark:text-slate-100"
+                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             {label}
@@ -81,7 +85,7 @@ export function LeagueNav({ league, leagues }: Props) {
         ))}
       </nav>
       {refresh.data && !refresh.data.ok && (
-        <p className="mx-auto max-w-5xl px-4 pb-2 text-xs text-red-600">Some refresh steps failed; check the league&apos;s sync log.</p>
+        <p className="mx-auto max-w-6xl px-4 pb-2 text-xs text-rose-600">Some refresh steps failed; check the league&apos;s sync log.</p>
       )}
     </header>
   );

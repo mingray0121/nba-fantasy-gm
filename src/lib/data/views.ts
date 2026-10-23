@@ -11,7 +11,14 @@ import {
   type ModelPlayer,
 } from "./model";
 import { optimizeLineup, type LineupPlayer } from "../engine/lineup";
-import { matchupWeights, projectCategories, toDateInputs, type CategoryProjection } from "../engine/matchup";
+import {
+  matchupWeights,
+  projectCategories,
+  referenceStats,
+  toDateInputs,
+  type CategoryProjection,
+  type ReferenceStat,
+} from "../engine/matchup";
 import { suggestAddDrops, type AddDropPlayer } from "../engine/addDrop";
 import { computeWindows, blendWindows, DEFAULT_WEIGHTS } from "../engine/projections";
 import { pointsValue, round } from "../engine/values";
@@ -181,6 +188,7 @@ type MatchupResult =
       categories: CategoryProjection[];
       teamName: string | null;
       opponentName: string | null;
+      reference: ReferenceStat[];
       myToDate: Record<string, number>;
       oppToDate: Record<string, number>;
     }
@@ -394,6 +402,14 @@ async function projectMatchup(ctx: LeagueContext, m: MatchupRow): Promise<Matchu
     ...names,
     myToDate,
     oppToDate,
+    reference: referenceStats({
+      categories: ctx.rules.categories,
+      myToDate,
+      oppToDate,
+      myRemaining: mine,
+      oppRemaining: opp,
+      custom: ctx.rules.custom_stats,
+    }),
     categories: projectCategories({
       categories: ctx.rules.categories,
       myToDate,

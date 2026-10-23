@@ -56,11 +56,13 @@ export function fmtTipTime(iso: string | null, tz: TimeZoneId): string {
 export function TimeZoneToggle() {
   const [tz, setTz] = useTimeZone();
   return (
-    <div className="flex overflow-hidden rounded-md border border-slate-200 text-xs dark:border-slate-700" role="group" aria-label="Time zone">
+    <div className="flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-medium dark:bg-slate-800" role="group" aria-label="Time zone">
       {TIME_ZONES.map((t) => (
         <button
           key={t.id}
-          className={`px-2 py-1 ${tz === t.id ? "bg-court-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+          className={`rounded-md px-2 py-1 transition-colors ${
+            tz === t.id ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-500 hover:text-slate-700"
+          }`}
           onClick={() => setTz(t.id)}
         >
           {t.label}

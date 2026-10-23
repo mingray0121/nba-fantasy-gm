@@ -16,7 +16,7 @@ export default async function LeagueLayout({ children, params }: { children: Rea
         league={{ id: league.id, name: league.name, source: league.source, scoringType: league.scoringType, lastSyncAt: league.lastSyncAt?.toString() ?? null }}
         leagues={leagues.filter((l) => !l.isArchived).map((l) => ({ id: l.id, name: l.name }))}
       />
-      <main className="mx-auto max-w-5xl px-4 py-5">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">{children}</main>
     </div>
   );
 }

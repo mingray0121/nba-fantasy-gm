@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { fmtTipTime, useTimeZone } from "../timezone";
-import { ErrorBox, PageTitle, StatusBadge } from "../ui";
+import { ErrorBox, PageTitle, SlotPill, StatusBadge } from "../ui";
 
 /** Yahoo's roster order. */
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
@@ -176,16 +176,55 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
     },
   });
   const update = (i: number, patch: Partial<Entry>) => setEntries(list.map((e, j) => (j === i ? { ...e, ...patch } : e)));
-  /** Someone in a full slot who can move into this player's current slot. */
-  const swapPartner = (slot: string, e: Entry) => list.find((x) => x.slot === slot && x.playerId !== e.playerId && fits(e.slot, x.positions));
-  /** Moves a player; into a full slot, it swaps with a player who can take his old slot (like Yahoo). */
-  const moveTo = (i: number, slot: string) => {
-    const e = list[i];
-    const full = capacity != null && used(slot, e.playerId) >= (capacity[slot] ?? 0);
-    const partner = full ? swapPartner(slot, e) : undefined;
+  const [moving, setMoving] = useState<number | null>(null); // player being dragged or tapped
+  const mover = list.find((x) => x.playerId === moving) ?? null;
+  const board = buildBoard(list, capacity);
+  /** Whether the moving player may go to this slot, swapping with its occupant if there is one. */
+  const canDrop = (slot: string, occupant: Entry | null) =>
+    mover != null &&
+    occupant?.playerId !== mover.playerId &&
+    fits(slot, mover.positions) &&
+    (!occupant || fits(mover.slot, occupant.positions)) &&
+    (occupant != null || mover.slot === slot || (capacity ? used(slot, mover.playerId) < (capacity[slot] ?? 0) : true));
+  // Pointer-based dragging (works with a mouse and on phones): press a player, drag, release on a slot.
+  const [ghost, setGhost] = useState<{ name: string; x: number; y: number } | null>(null);
+  const releaseRef = useRef<(key: string | null, moved: boolean) => void>(() => {});
+  releaseRef.current = (key, moved) => {
+    const row = key ? board.find((r) => r.key === key) : undefined;
+    if (row && mover && !(row.player?.playerId === mover.playerId)) drop(row.slot, row.player);
+    else if (moved) setMoving(null); // dropped nowhere useful
+    // A press without moving leaves the player selected, like tapping Move.
+  };
+  const startDrag = (e: Entry, ev: React.PointerEvent) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    setMoving(e.playerId);
+    const x0 = ev.clientX;
+    const y0 = ev.clientY;
+    let moved = false;
+    const onMove = (m: PointerEvent) => {
+      if (Math.abs(m.clientX - x0) + Math.abs(m.clientY - y0) > 6) moved = true;
+      if (moved) setGhost({ name: e.name, x: m.clientX, y: m.clientY });
+    };
+    const onUp = (u: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setGhost(null);
+      const el = document.elementFromPoint(u.clientX, u.clientY)?.closest("[data-row]");
+      releaseRef.current(moved ? (el?.getAttribute("data-row") ?? null) : null, moved);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+  /** Moves the moving player into a slot; its occupant takes the mover's old slot (like Yahoo). */
+  const drop = (slot: string, occupant: Entry | null) => {
+    if (!mover || !canDrop(slot, occupant)) return setMoving(null);
     setEntries(
-      list.map((x, j) => (j === i ? { ...x, slot } : partner && x.playerId === partner.playerId ? { ...x, slot: e.slot } : x)),
+      list.map((x) =>
+        x.playerId === mover.playerId ? { ...x, slot } : occupant && x.playerId === occupant.playerId ? { ...x, slot: mover.slot } : x,
+      ),
     );
+    setMoving(null);
   };
 
   return (
@@ -227,18 +266,27 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
           })}
         </div>
       </div>
+      {ghost && (
+        <div
+          className="pointer-events-none fixed z-50 rounded-md bg-court-600 px-2 py-1 text-xs text-white shadow"
+          style={{ left: ghost.x + 8, top: ghost.y + 8 }}
+        >
+          {ghost.name}
+        </div>
+      )}
+      <p className="mb-2 text-xs text-slate-500">
+        Drag a player onto another slot to move him there, or tap Move and then a slot. Taking a filled slot swaps the two players. Only
+        slots the player can play light up.
+      </p>
       {SECTIONS.map((section) => {
-        const rows = list
-          .map((e, i) => ({ e, i }))
-          .filter(({ e }) => section.slots.includes(e.slot))
-          .sort((a, b) => SLOTS.indexOf(a.e.slot) - SLOTS.indexOf(b.e.slot));
-        if (rows.length === 0 && section.title !== "Starters") return null;
+        const rows = board.filter((r) => section.slots.includes(r.slot));
+        if (rows.length === 0) return null;
         return (
           <div key={section.title} className="card mb-4 overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
-                  <th className="w-24">{section.title}</th>
+                  <th className="w-16">{section.title}</th>
                   <th>Player</th>
                   <th>Today</th>
                   <th>Positions</th>
@@ -246,67 +294,85 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ e, i }) => (
-                  <tr key={e.playerId}>
-                    <td>
-                      <select className="input w-auto py-1" value={e.slot} onChange={(ev) => moveTo(i, ev.target.value)}>
-                        {SLOTS.filter((s) => s === e.slot || ((capacity ? (capacity[s] ?? 0) : 1) > 0 && fits(s, e.positions))).map((s) => {
-                          const full = capacity != null && s !== e.slot && used(s, e.playerId) >= (capacity[s] ?? 0);
-                          const partner = full ? swapPartner(s, e) : undefined;
-                          return (
-                            <option key={s} value={s} disabled={full && !partner}>
-                              {s}
-                              {full ? (partner ? ` (swap with ${partner.name})` : " (full)") : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {!fits(e.slot, e.positions) && <div className="mt-1 text-xs text-red-600">Can&apos;t play {e.slot}</div>}
-                    </td>
-                    <td>
-                      <span className="font-medium">{e.name}</span> <StatusBadge status={e.injury ?? null} />
-                      <div className="text-xs text-slate-500">{[e.team, e.positions.join(", ")].filter(Boolean).join(" · ")}</div>
-                    </td>
-                    <td className="text-xs">
-                      {e.game ? (
+                {rows.map((row) => {
+                  const e = row.player;
+                  const i = e ? list.indexOf(e) : -1;
+                  const target = mover != null && canDrop(row.slot, e);
+                  const dim = mover != null && !target && e?.playerId !== mover.playerId;
+                  return (
+                    <tr
+                      key={row.key}
+                      className={`${target ? "cursor-pointer bg-green-50 dark:bg-green-950" : ""} ${dim ? "opacity-40" : ""} ${
+                        e && e.playerId === moving ? "bg-slate-100 dark:bg-slate-800" : ""
+                      }`}
+                      data-row={row.key}
+                      onClick={() => target && drop(row.slot, e)}
+                    >
+                      <td>
+                        <SlotPill slot={row.slot} />
+                        {row.problem && <div className="mt-1 text-xs text-red-600">{row.problem}</div>}
+                      </td>
+                      {e ? (
                         <>
-                          {e.game.home ? "vs" : "@"} {e.game.opponent}
-                          <div className="text-slate-500">{fmtTipTime(e.game.tipTime, tz)}</div>
+                          <td onPointerDown={(ev) => startDrag(e, ev)} className="cursor-grab touch-none select-none">
+                            <span className="font-medium">{e.name}</span> <StatusBadge status={e.injury ?? null} />
+                            <div className="text-xs text-slate-500">{[e.team, e.positions.join(", ")].filter(Boolean).join(" · ")}</div>
+                          </td>
+                          <td className="text-xs">
+                            {e.game ? (
+                              <>
+                                {e.game.home ? "vs" : "@"} {e.game.opponent}
+                                <div className="text-slate-500">{fmtTipTime(e.game.tipTime, tz)}</div>
+                              </>
+                            ) : (
+                              <span className="text-slate-400">{e.game === null ? "No game" : "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            <div className="flex gap-1">
+                              {POSITIONS.map((p) => (
+                                <label key={p} className="flex items-center gap-0.5 text-xs" onClick={(ev) => ev.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={e.positions.includes(p)}
+                                    onChange={(ev) =>
+                                      update(i, { positions: ev.target.checked ? [...e.positions, p] : e.positions.filter((x) => x !== p) })
+                                    }
+                                  />
+                                  {p}
+                                </label>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="text-right whitespace-nowrap">
+                            <button
+                              className="mr-3 text-xs text-slate-500 underline"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setMoving(moving === e.playerId ? null : e.playerId);
+                              }}
+                            >
+                              {moving === e.playerId ? "Cancel" : "Move"}
+                            </button>
+                            <button
+                              className="text-xs text-red-600"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setEntries(list.filter((_, j) => j !== i));
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </td>
                         </>
                       ) : (
-                        <span className="text-slate-400">{e.game === null ? "No game" : "—"}</span>
+                        <td colSpan={4} className="text-slate-400">
+                          {current.isLoading ? "Loading…" : "(Empty)"}
+                        </td>
                       )}
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        {POSITIONS.map((p) => (
-                          <label key={p} className="flex items-center gap-0.5 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={e.positions.includes(p)}
-                              onChange={(ev) =>
-                                update(i, { positions: ev.target.checked ? [...e.positions, p] : e.positions.filter((x) => x !== p) })
-                              }
-                            />
-                            {p}
-                          </label>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <button className="text-xs text-red-600" onClick={() => setEntries(list.filter((_, j) => j !== i))}>
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="text-slate-500">
-                      {current.isLoading ? "Loading…" : "No players yet. Search above to add them."}
-                    </td>
-                  </tr>
-                )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -319,6 +385,37 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
       </button>
     </>
   );
+}
+
+interface BoardRow {
+  key: string;
+  slot: string;
+  player: Entry | null;
+  problem?: string;
+}
+
+/**
+ * Yahoo-style slot rows: one row per roster slot in order (PG, SG, G, ... BN, BN, BN, IL ...),
+ * filled with the players in that slot. Players beyond a slot's count, or in a slot they
+ * can't play, get flagged rows so nothing is hidden.
+ */
+function buildBoard(list: Entry[], capacity: Record<string, number> | null): BoardRow[] {
+  const rows: BoardRow[] = [];
+  for (const slot of SLOTS) {
+    const players = list.filter((e) => e.slot === slot);
+    const count = capacity ? (capacity[slot] ?? 0) : players.length;
+    for (let n = 0; n < Math.max(count, players.length); n++) {
+      const player = players[n] ?? null;
+      const problem =
+        n >= count
+          ? `Only ${count} ${slot} slot${count === 1 ? "" : "s"}`
+          : player && !fits(slot, player.positions)
+            ? `Can't play ${slot}`
+            : undefined;
+      rows.push({ key: `${slot}-${n}`, slot, player, problem });
+    }
+  }
+  return rows;
 }
 
 /** Players whose game had started keep today's slot (Yahoo locks each player at tip-off). */
