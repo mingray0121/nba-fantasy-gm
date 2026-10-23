@@ -179,11 +179,21 @@ type MatchupResult =
       kind: "categories";
       week: number;
       categories: CategoryProjection[];
+      teamName: string | null;
       opponentName: string | null;
       myToDate: Record<string, number>;
       oppToDate: Record<string, number>;
     }
-  | { kind: "points"; week: number; mine: number; opponent: number; mineToDate: number; opponentToDate: number; opponentName: string | null };
+  | {
+      kind: "points";
+      week: number;
+      mine: number;
+      opponent: number;
+      mineToDate: number;
+      opponentToDate: number;
+      teamName: string | null;
+      opponentName: string | null;
+    };
 
 /**
  * Sum of projected stat lines for a team's optimized starters over the remaining days.
@@ -309,25 +319,38 @@ function mergeToDate(baseline: Record<string, number>, line: StatLine): Record<s
   return out;
 }
 
+type MatchupRow = typeof schema.matchups.$inferSelect;
+
+/** My team's matchup this week (drives the matchup-aware lineup weighting). */
 export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResult | null> {
   if (!ctx.myTeam) return null;
   const m = await latestMatchup(ctx.league.id, ctx.myTeam.id);
   if (!m || !m.opponentTeamId) return null;
+  return projectMatchup(ctx, m);
+}
+
+/**
+ * Projects one matchup: team (side A) vs opponentTeam (side B), as stats so far plus
+ * projected starts for the rest of the week.
+ */
+async function projectMatchup(ctx: LeagueContext, m: MatchupRow): Promise<MatchupResult> {
+  const opponentTeamId = m.opponentTeamId!;
   const week = currentWeek(ctx);
   const start = m.weekStart ?? week.start;
   const end = m.weekEnd ?? week.end;
-  // Today's stats may already be in "to date", so project from tomorrow once games have started.
   const from = ctx.date < start ? start : ctx.date;
   const days: string[] = [];
   for (let d = from; d <= end; d = addDays(d, 1)) days.push(d);
   const totalDays = Math.max(1, (Date.parse(end) - Date.parse(start)) / 86400000 + 1);
-  const opponent = ctx.teams.find((t) => t.id === m.opponentTeamId);
+  const team = ctx.teams.find((t) => t.id === m.teamId);
+  const opponent = ctx.teams.find((t) => t.id === opponentTeamId);
 
-  const mine = await projectRemaining(ctx, ctx.myTeam.id, days);
-  const opp = await projectRemaining(ctx, m.opponentTeamId, days);
+  const mine = await projectRemaining(ctx, m.teamId, days);
+  const opp = await projectRemaining(ctx, opponentTeamId, days);
 
   // Manual leagues: stats so far = the entered baseline (through baselineThrough) plus box scores
-  // of each later day's active players. Yahoo leagues get their stats so far from Yahoo.
+  // of each later day's active players: saved slots for your team, the best lineup for others.
+  // Yahoo leagues get their stats so far from Yahoo.
   let myToDate: Record<string, number> = m.statsToDate;
   let oppToDate: Record<string, number> = m.opponentStatsToDate;
   let myPointsToDate = m.pointsToDate ?? 0;
@@ -340,33 +363,35 @@ export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResu
       for (let d = hasBaseline && m.baselineThrough ? addDays(m.baselineThrough, 1) : start; d <= last; d = addDays(d, 1)) out.push(d);
       return out;
     };
+    const lineups = (teamId: number) => (teamId === ctx.myTeam?.id ? "saved" : "best");
     const myBase = Object.keys(m.statsToDate).length > 0 || m.pointsToDate != null;
     const oppBase = Object.keys(m.opponentStatsToDate).length > 0 || m.opponentPointsToDate != null;
-    const myLine = await statsOnDays(ctx, ctx.myTeam.id, daysAfter(myBase), "saved");
-    const oppLine = await statsOnDays(ctx, m.opponentTeamId, daysAfter(oppBase), "best");
+    const myLine = await statsOnDays(ctx, m.teamId, daysAfter(myBase), lineups(m.teamId));
+    const oppLine = await statsOnDays(ctx, opponentTeamId, daysAfter(oppBase), lineups(opponentTeamId));
     myToDate = mergeToDate(m.statsToDate, myLine);
     oppToDate = mergeToDate(m.opponentStatsToDate, oppLine);
     myPointsToDate += pointsValue(myLine, ctx.rules.point_weights);
     oppPointsToDate += pointsValue(oppLine, ctx.rules.point_weights);
   }
 
+  const names = { teamName: team?.name ?? null, opponentName: opponent?.name ?? null };
   if (ctx.rules.scoring_type === "h2h_points") {
     const mineToDate = round(myPointsToDate, 1);
     const oppToDate = round(oppPointsToDate, 1);
     return {
       kind: "points",
       week: m.week,
+      ...names,
       mineToDate,
       opponentToDate: oppToDate,
       mine: round(mineToDate + pointsValue(mine, ctx.rules.point_weights), 1),
       opponent: round(oppToDate + pointsValue(opp, ctx.rules.point_weights), 1),
-      opponentName: opponent?.name ?? null,
     };
   }
   return {
     kind: "categories",
     week: m.week,
-    opponentName: opponent?.name ?? null,
+    ...names,
     myToDate,
     oppToDate,
     categories: projectCategories({
@@ -381,29 +406,63 @@ export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResu
   };
 }
 
+/** Every matchup this week, yours first. Manual leagues can set any of them by hand. */
 export async function matchupView(leagueId: number) {
   const ctx = await loadLeagueContext(leagueId);
-  const result = await matchupProjection(ctx);
-  // Manual leagues set their matchup by hand: the opponent and the week's stats so far.
-  let manual = null;
-  if (ctx.league.source === "manual" && ctx.myTeam) {
-    const week = currentWeek(ctx);
-    const m = await latestMatchup(leagueId, ctx.myTeam.id);
-    const current = m && m.weekStart === week.start ? m : null;
-    manual = {
-      week: { start: week.start, end: week.end },
-      teams: ctx.teams.filter((t) => !t.isMine).map((t) => ({ id: t.id, name: t.name })),
-      scoringType: ctx.rules.scoring_type,
-      inputs: ctx.rules.scoring_type === "h2h_points" ? [] : toDateInputs(ctx.rules.categories, ctx.rules.custom_stats),
-      opponentTeamId: current?.opponentTeamId ?? null,
-      myStats: current?.statsToDate ?? {},
-      opponentStats: current?.opponentStatsToDate ?? {},
-      myPoints: current?.pointsToDate ?? null,
-      opponentPoints: current?.opponentPointsToDate ?? null,
-      baselineThrough: current?.baselineThrough ?? null,
-    };
+  const week = currentWeek(ctx);
+  let rows: MatchupRow[];
+  if (ctx.league.source === "manual") {
+    rows = await getDb()
+      .select()
+      .from(schema.matchups)
+      .where(and(eq(schema.matchups.leagueId, leagueId), eq(schema.matchups.weekStart, week.start)));
+  } else {
+    const mine = ctx.myTeam ? await latestMatchup(leagueId, ctx.myTeam.id) : null;
+    rows = mine ? [mine] : [];
   }
-  return { result, punted: ctx.settings.puntCategories, manual };
+  const isMine = (m: MatchupRow) => m.teamId === ctx.myTeam?.id || m.opponentTeamId === ctx.myTeam?.id;
+  rows.sort((a, b) => Number(isMine(b)) - Number(isMine(a)) || a.id - b.id);
+
+  const matchups = [];
+  for (const m of rows.filter((r) => r.opponentTeamId)) {
+    // Show your team on the left of your own matchup.
+    const row = m.opponentTeamId === ctx.myTeam?.id ? flip(m) : m;
+    matchups.push({
+      id: m.id,
+      isMine: isMine(m),
+      teamId: row.teamId,
+      opponentTeamId: row.opponentTeamId!,
+      teamStats: row.statsToDate,
+      opponentStats: row.opponentStatsToDate,
+      teamPoints: row.pointsToDate,
+      opponentPoints: row.opponentPointsToDate,
+      baselineThrough: row.baselineThrough,
+      result: await projectMatchup(ctx, row),
+    });
+  }
+  const manual =
+    ctx.league.source === "manual"
+      ? {
+          week: { start: week.start, end: week.end },
+          teams: ctx.teams.map((t) => ({ id: t.id, name: t.name, isMine: t.isMine })),
+          scoringType: ctx.rules.scoring_type,
+          inputs: ctx.rules.scoring_type === "h2h_points" ? [] : toDateInputs(ctx.rules.categories, ctx.rules.custom_stats),
+        }
+      : null;
+  return { matchups, punted: ctx.settings.puntCategories, manual };
+}
+
+/** The same matchup seen from the other side. */
+function flip(m: MatchupRow): MatchupRow {
+  return {
+    ...m,
+    teamId: m.opponentTeamId!,
+    opponentTeamId: m.teamId,
+    statsToDate: m.opponentStatsToDate,
+    opponentStatsToDate: m.statsToDate,
+    pointsToDate: m.opponentPointsToDate,
+    opponentPointsToDate: m.pointsToDate,
+  };
 }
 
 /* ------------------------------------------------------------------ */

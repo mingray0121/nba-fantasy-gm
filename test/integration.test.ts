@@ -130,10 +130,11 @@ describe.skipIf(!url)("integration", () => {
     expect(w.totalStarts).toBeGreaterThan(0);
 
     const cat = await m.views.matchupView(ids.cats);
-    expect(cat.result?.kind).toBe("categories");
+    expect(cat.matchups[0]?.result.kind).toBe("categories");
     const pts = await m.views.matchupView(ids.points);
-    expect(pts.result?.kind).toBe("points");
-    if (pts.result?.kind === "points") expect(pts.result.mine).toBeGreaterThan(150);
+    const ptsResult = pts.matchups[0]?.result;
+    expect(ptsResult?.kind).toBe("points");
+    if (ptsResult?.kind === "points") expect(ptsResult.mine).toBeGreaterThan(150);
 
     const ad = await m.views.addDropView(ids.points);
     expect(ad.freeAgents.length).toBe(12);
