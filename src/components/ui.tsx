@@ -55,11 +55,6 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="card p-6 text-sm text-slate-500">{children}</div>;
 }
 
-export function fmtTime(iso: string | null) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 export function timeAgo(d: Date | string | null) {
   if (!d) return "never";
   const mins = Math.round((Date.now() - new Date(d).getTime()) / 60000);

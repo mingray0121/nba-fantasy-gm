@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "./fetcher";
 import { timeAgo } from "./ui";
+import { TimeZoneToggle } from "./timezone";
 
 interface Props {
   league: { id: number; name: string; source: string; scoringType: string | null; lastSyncAt: string | null };
@@ -21,7 +22,12 @@ export function LeagueNav({ league, leagues }: Props) {
     ["week", "Week"],
     ["matchup", "Matchup"],
     ["add-drop", "Add / drop"],
-    ...(league.source === "manual" ? [["roster", "Roster"]] : []),
+    ...(league.source === "manual"
+      ? [
+          ["roster", "Roster"],
+          ["transactions", "Transactions"],
+        ]
+      : []),
     ["rules", "Rules"],
     ["settings", "Settings"],
   ];
@@ -54,6 +60,7 @@ export function LeagueNav({ league, leagues }: Props) {
           ))}
         </select>
         <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+          <TimeZoneToggle />
           <span className="hidden sm:inline">Updated {timeAgo(league.lastSyncAt)}</span>
           <button className="btn-secondary py-1" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
             {refresh.isPending ? "Refreshing…" : "Refresh"}

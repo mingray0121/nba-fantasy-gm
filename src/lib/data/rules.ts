@@ -2,7 +2,7 @@ import { and, asc, desc, eq, max } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import type { RuleSource } from "@/db/schema";
 import { isNegativeStat, type LeagueRules, type Slot } from "../rules/schema";
-import { STAT_DISPLAY, type StatKey } from "../stats";
+import { STAT_DISPLAY, type CustomStats, type StatKey } from "../stats";
 
 export interface ActiveRules {
   versionId: number;
@@ -48,7 +48,8 @@ export async function getRuleVersion(leagueId: number, versionId: number): Promi
     createdAt: v.createdAt,
     rules: {
       scoring_type: v.scoringType,
-      categories: isPoints ? [] : cats.map((c) => c.statKey as StatKey),
+      categories: isPoints ? [] : cats.map((c) => c.statKey),
+      custom_stats: isPoints ? {} : ((v.rulesRaw as { normalized?: { custom_stats?: CustomStats } }).normalized?.custom_stats ?? {}),
       point_weights: isPoints
         ? Object.fromEntries(cats.map((c) => [c.statKey, c.pointWeight ?? 0]))
         : {},
@@ -111,8 +112,8 @@ export async function saveRuleVersion(
         statRows.map((r) => ({
           ruleVersionId: v.id,
           statKey: r.key,
-          displayName: STAT_DISPLAY[r.key] ?? r.key,
-          isNegative: isNegativeStat(r.key),
+          displayName: STAT_DISPLAY[r.key as StatKey] ?? r.key,
+          isNegative: isNegativeStat(r.key, rules.custom_stats),
           pointWeight: r.w,
           sortOrder: r.i,
         })),

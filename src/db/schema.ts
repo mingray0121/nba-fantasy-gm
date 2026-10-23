@@ -320,6 +320,8 @@ export const playerGameLogs = pgTable(
     fta: integer("fta").notNull().default(0),
     fg3m: integer("fg3m").notNull().default(0),
     fg3a: integer("fg3a").notNull().default(0),
+    pf: integer("pf").notNull().default(0),
+    plusMinus: integer("plus_minus").notNull().default(0),
     dnpReason: text("dnp_reason"),
   },
   (t) => [
@@ -381,6 +383,8 @@ export const playerProjections = pgTable(
     fg3a: real("fg3a").notNull(),
     dd: real("dd").notNull().default(0), // double-double rate per game
     td: real("td").notNull().default(0), // triple-double rate per game
+    pf: real("pf").notNull().default(0),
+    plusMinus: real("plus_minus").notNull().default(0),
     gamesRemaining: integer("games_remaining").notNull().default(0), // rest of season
   },
   (t) => [uniqueIndex("player_projections_player_date_horizon").on(t.playerId, t.asOfDate, t.horizon)],

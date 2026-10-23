@@ -16,7 +16,7 @@ import { suggestAddDrops, type AddDropPlayer } from "../engine/addDrop";
 import { computeWindows, blendWindows, DEFAULT_WEIGHTS } from "../engine/projections";
 import { pointsValue, round } from "../engine/values";
 import { INJURED_SLOTS, type Slot } from "../rules/schema";
-import { addLines, EMPTY_LINE, scaleLine, type StatKey, type StatLine } from "../stats";
+import { addLines, EMPTY_LINE, scaleLine, type StatLine } from "../stats";
 import { addDays, today } from "../dates";
 
 /* ------------------------------------------------------------------ */
@@ -232,11 +232,12 @@ export async function matchupProjection(ctx: LeagueContext): Promise<MatchupResu
     opponentName: opponent?.name ?? null,
     categories: projectCategories({
       categories: ctx.rules.categories,
-      myToDate: m.statsToDate as Partial<Record<StatKey, number>>,
-      oppToDate: m.opponentStatsToDate as Partial<Record<StatKey, number>>,
+      myToDate: m.statsToDate,
+      oppToDate: m.opponentStatsToDate,
       myRemaining: mine,
       oppRemaining: opp,
       weekFractionLeft: days.length / totalDays,
+      custom: ctx.rules.custom_stats,
     }),
   };
 }

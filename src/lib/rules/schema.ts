@@ -1,6 +1,6 @@
 import { z } from "zod";
 import Papa from "papaparse";
-import { NEGATIVE_STATS, normalizeStatKey, type StatKey } from "../stats";
+import { COUNTING_STATS, isNegativeCategory, normalizeStatKey, type CountingStatKey, type CustomStat, type CustomStats, type StatKey } from "../stats";
 import type { ScoringType } from "@/db/schema";
 
 export const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"] as const;
@@ -22,22 +22,14 @@ export function normalizeSlot(raw: string): Slot | null {
 /** The normalized rules every part of the app reads. */
 export interface LeagueRules {
   scoring_type: ScoringType;
-  categories: StatKey[];
+  categories: string[]; // built-in stat keys or keys defined in custom_stats
+  custom_stats: CustomStats;
   point_weights: Partial<Record<StatKey, number>>;
   roster_slots: Partial<Record<Slot, number>>;
   games_played_limit: number | null;
   max_adds_per_week: number | null;
   week_start_day: number;
 }
-
-const statKey = z.string().transform((raw, ctx) => {
-  const key = normalizeStatKey(raw);
-  if (!key) {
-    ctx.addIssue({ code: "custom", message: `Unknown stat "${raw}"` });
-    return z.NEVER;
-  }
-  return key;
-});
 
 const weekStart = z
   .union([z.number().int().min(0).max(6), z.string()])
@@ -55,7 +47,17 @@ const weekStart = z
 export const rulesInput = z
   .object({
     scoring_type: z.enum(["h2h_categories", "h2h_points", "roto"]),
-    categories: z.array(statKey).optional(),
+    categories: z.array(z.string()).optional(),
+    custom_stats: z
+      .record(
+        z.string(),
+        z.object({
+          ratio: z.tuple([z.string(), z.string()]).optional(),
+          sum: z.array(z.string()).min(2).optional(),
+          negative: z.boolean().optional(),
+        }),
+      )
+      .optional(),
     point_weights: z.record(z.string(), z.number()).optional(),
     roster_slots: z.record(z.string(), z.number().int().min(0).max(20)),
     games_played_limit: z.number().int().positive().nullable().optional(),
@@ -86,7 +88,41 @@ export const rulesInput = z
       point_weights[key] = w;
     }
 
-    const categories = [...new Set(v.categories ?? [])];
+    const custom_stats: CustomStats = {};
+    for (const [rawKey, def] of Object.entries(v.custom_stats ?? {})) {
+      const key = rawKey.trim().toUpperCase();
+      const path = ["custom_stats", rawKey];
+      if (!key || key.length > 16) {
+        ctx.addIssue({ code: "custom", path, message: "Custom stat names need 1 to 16 characters" });
+        continue;
+      }
+      if (normalizeStatKey(key)) {
+        ctx.addIssue({ code: "custom", path, message: `"${rawKey}" is already a built-in stat` });
+        continue;
+      }
+      if (Boolean(def.ratio) === Boolean(def.sum)) {
+        ctx.addIssue({ code: "custom", path, message: 'Give exactly one of "ratio" or "sum"' });
+        continue;
+      }
+      const parts: CountingStatKey[] = [];
+      for (const raw of def.ratio ?? def.sum ?? []) {
+        const k = normalizeStatKey(raw);
+        if (k && k in COUNTING_STATS) parts.push(k as CountingStatKey);
+        else ctx.addIssue({ code: "custom", path, message: `"${raw}" is not a counting stat (use stats like PTS, AST, TO)` });
+      }
+      const stat: CustomStat = def.ratio
+        ? { ratio: parts as [CountingStatKey, CountingStatKey], negative: def.negative }
+        : { sum: parts, negative: def.negative };
+      if (def.negative === undefined) delete stat.negative;
+      custom_stats[key] = stat;
+    }
+
+    const categories: string[] = [];
+    for (const raw of v.categories ?? []) {
+      const key = normalizeStatKey(raw) ?? (custom_stats[raw.trim().toUpperCase()] ? raw.trim().toUpperCase() : null);
+      if (!key) ctx.addIssue({ code: "custom", path: ["categories"], message: `Unknown stat "${raw}" (define it in custom_stats)` });
+      else if (!categories.includes(key)) categories.push(key);
+    }
     if (v.scoring_type === "h2h_points") {
       if (Object.keys(point_weights).length === 0) {
         ctx.addIssue({ code: "custom", path: ["point_weights"], message: "A points league needs point_weights" });
@@ -98,6 +134,7 @@ export const rulesInput = z
     return {
       scoring_type: v.scoring_type,
       categories: v.scoring_type === "h2h_points" ? [] : categories,
+      custom_stats: v.scoring_type === "h2h_points" ? {} : custom_stats,
       point_weights: v.scoring_type === "h2h_points" ? point_weights : {},
       roster_slots,
       games_played_limit: v.games_played_limit ?? null,
@@ -193,15 +230,17 @@ export class RulesFileError extends Error {
   }
 }
 
-export function isNegativeStat(key: StatKey) {
-  return NEGATIVE_STATS.has(key);
+export function isNegativeStat(key: string, custom: CustomStats = {}) {
+  return isNegativeCategory(key, custom);
 }
 
 /** Back to the upload format, for the editor and for downloads. */
 export function toRulesInput(r: LeagueRules): RulesInput {
   return {
     scoring_type: r.scoring_type,
-    ...(r.scoring_type === "h2h_points" ? { point_weights: r.point_weights as Record<string, number> } : { categories: r.categories }),
+    ...(r.scoring_type === "h2h_points"
+      ? { point_weights: r.point_weights as Record<string, number> }
+      : { categories: r.categories, ...(Object.keys(r.custom_stats).length ? { custom_stats: r.custom_stats } : {}) }),
     roster_slots: r.roster_slots as Record<string, number>,
     games_played_limit: r.games_played_limit,
     max_adds_per_week: r.max_adds_per_week,
@@ -212,6 +251,7 @@ export function toRulesInput(r: LeagueRules): RulesInput {
 export const DEFAULT_RULES: LeagueRules = {
   scoring_type: "h2h_categories",
   categories: ["FG%", "FT%", "3PM", "PTS", "REB", "AST", "STL", "BLK", "TO"],
+  custom_stats: {},
   point_weights: {},
   roster_slots: { PG: 1, SG: 1, G: 1, SF: 1, PF: 1, F: 1, C: 2, UTIL: 2, BN: 3, IL: 2 },
   games_played_limit: null,

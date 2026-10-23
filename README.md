@@ -61,7 +61,19 @@ slot,UTIL,10
 slot,BN,3
 ```
 
-Stat keys: PTS, REB, OREB, DREB, AST, STL, BLK, TO, 3PM, 3PA, FGM, FGA, FTM, FTA, DD, TD, MIN, FG%, FT%, 3P% (Yahoo names like ST and 3PTM are accepted too).
+Stat keys: PTS, REB, OREB, DREB, AST, STL, BLK, TO, 3PM, 3PA, FGM, FGA, FTM, FTA, DD, TD, MIN, PF, +/-, FG%, FT%, 3P%, A/T (Yahoo names like ST and 3PTM are accepted too).
+
+Any other category can be defined in JSON from the counting stats above, as a `sum` or a `ratio` (ratios are scored by impact, like percentages; add `"negative": true` when lower is better):
+
+```json
+{
+  "categories": ["PTS", "STOCKS", "AST/PF"],
+  "custom_stats": {
+    "STOCKS": {"sum": ["STL", "BLK"]},
+    "AST/PF": {"ratio": ["AST", "PF"]}
+  }
+}
+```
 
 ## Setup
 

@@ -3,9 +3,16 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
-import { ErrorBox, PageTitle } from "../ui";
+import { fmtTipTime, useTimeZone } from "../timezone";
+import { ErrorBox, PageTitle, StatusBadge } from "../ui";
 
+/** Yahoo's roster order. */
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
+const SECTIONS = [
+  { title: "Starters", slots: ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL"] },
+  { title: "Bench", slots: ["BN"] },
+  { title: "Injured list", slots: ["IL", "IL+"] },
+];
 const POSITIONS = ["PG", "SG", "SF", "PF", "C"];
 
 interface Team {
@@ -19,6 +26,9 @@ interface Entry {
   name: string;
   slot: string;
   positions: string[];
+  team?: string | null;
+  injury?: string | null;
+  game?: { opponent: string; home: boolean; tipTime: string | null } | null;
 }
 
 interface SearchResult {
@@ -43,8 +53,7 @@ export function RosterView({ leagueId }: { leagueId: number }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["league", leagueId] });
   const addTeam = useMutation({
-    mutationFn: (name: string) =>
-      api<{ team: Team }>(`/api/leagues/${leagueId}/teams`, { method: "POST", body: JSON.stringify({ name }) }),
+    mutationFn: (name: string) => api<{ team: Team }>(`/api/leagues/${leagueId}/teams`, { method: "POST", body: JSON.stringify({ name }) }),
     onSuccess: (r) => {
       setSelected(r.team.id);
       invalidate();
@@ -65,10 +74,7 @@ export function RosterView({ leagueId }: { leagueId: number }) {
 
   return (
     <>
-      <PageTitle
-        title="Roster"
-        subtitle="Enter every team's players. Players on no team count as free agents for add / drop."
-      />
+      <PageTitle title="Roster" subtitle="Enter every team's players. Players on no team count as free agents for add / drop." />
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-4">
         {teams.data?.teams.map((t) => (
           <button key={t.id} className={t.id === teamId ? "btn-primary" : "btn-secondary"} onClick={() => setSelected(t.id)}>
@@ -132,6 +138,7 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
     queryFn: () => api<{ players: Entry[] }>(`/api/leagues/${leagueId}/roster?teamId=${team.id}`),
   });
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [tz] = useTimeZone();
   const list = entries ?? current.data?.players ?? [];
   const [search, setSearch] = useState("");
   const results = useQuery({
@@ -143,7 +150,10 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
     mutationFn: () =>
       api(`/api/leagues/${leagueId}/roster`, {
         method: "PUT",
-        body: JSON.stringify({ teamId: team.id, players: list.map((e) => ({ playerId: e.playerId, slot: e.slot, positions: e.positions })) }),
+        body: JSON.stringify({
+          teamId: team.id,
+          players: list.map((e) => ({ playerId: e.playerId, slot: e.slot, positions: e.positions })),
+        }),
       }),
     onSuccess: () => {
       setEntries(null);
@@ -171,7 +181,10 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
                 className="btn-secondary justify-between"
                 disabled={onThisTeam || Boolean(elsewhere)}
                 onClick={() => {
-                  setEntries([...list, { playerId: p.id, name: p.name, slot: "BN", positions: p.positions }]);
+                  setEntries([
+                    ...list,
+                    { playerId: p.id, name: p.name, slot: "BN", positions: p.positions, team: p.team, injury: p.injury },
+                  ]);
                   setSearch("");
                 }}
               >
@@ -182,66 +195,89 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
                   </span>
                   {p.injury && <span className="ml-2 text-xs text-red-600">{p.injury}</span>}
                 </span>
-                <span className="text-xs text-slate-500">
-                  {onThisTeam ? "On this team" : elsewhere ? `On ${elsewhere}` : "Free agent"}
-                </span>
+                <span className="text-xs text-slate-500">{onThisTeam ? "On this team" : elsewhere ? `On ${elsewhere}` : "Free agent"}</span>
               </button>
             );
           })}
         </div>
       </div>
-      <div className="card overflow-x-auto">
-        <table className="table-base">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Positions</th>
-              <th>Slot</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((e, i) => (
-              <tr key={e.playerId}>
-                <td>{e.name}</td>
-                <td>
-                  <div className="flex gap-1">
-                    {POSITIONS.map((p) => (
-                      <label key={p} className="flex items-center gap-0.5 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={e.positions.includes(p)}
-                          onChange={(ev) => update(i, { positions: ev.target.checked ? [...e.positions, p] : e.positions.filter((x) => x !== p) })}
-                        />
-                        {p}
-                      </label>
-                    ))}
-                  </div>
-                </td>
-                <td>
-                  <select className="input w-auto py-1" value={e.slot} onChange={(ev) => update(i, { slot: ev.target.value })}>
-                    {SLOTS.map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <button className="text-xs text-red-600" onClick={() => setEntries(list.filter((_, j) => j !== i))}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && !current.isLoading && (
-              <tr>
-                <td colSpan={4} className="text-slate-500">
-                  No players yet. Search above to add them.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {SECTIONS.map((section) => {
+        const rows = list
+          .map((e, i) => ({ e, i }))
+          .filter(({ e }) => section.slots.includes(e.slot))
+          .sort((a, b) => SLOTS.indexOf(a.e.slot) - SLOTS.indexOf(b.e.slot));
+        if (rows.length === 0 && section.title !== "Starters") return null;
+        return (
+          <div key={section.title} className="card mb-4 overflow-x-auto">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th className="w-24">{section.title}</th>
+                  <th>Player</th>
+                  <th>Today</th>
+                  <th>Positions</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ e, i }) => (
+                  <tr key={e.playerId}>
+                    <td>
+                      <select className="input w-auto py-1" value={e.slot} onChange={(ev) => update(i, { slot: ev.target.value })}>
+                        {SLOTS.map((s) => (
+                          <option key={s}>{s}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <span className="font-medium">{e.name}</span> <StatusBadge status={e.injury ?? null} />
+                      <div className="text-xs text-slate-500">{[e.team, e.positions.join(", ")].filter(Boolean).join(" · ")}</div>
+                    </td>
+                    <td className="text-xs">
+                      {e.game ? (
+                        <>
+                          {e.game.home ? "vs" : "@"} {e.game.opponent}
+                          <div className="text-slate-500">{fmtTipTime(e.game.tipTime, tz)}</div>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">{e.game === null ? "No game" : "—"}</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex gap-1">
+                        {POSITIONS.map((p) => (
+                          <label key={p} className="flex items-center gap-0.5 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={e.positions.includes(p)}
+                              onChange={(ev) =>
+                                update(i, { positions: ev.target.checked ? [...e.positions, p] : e.positions.filter((x) => x !== p) })
+                              }
+                            />
+                            {p}
+                          </label>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <button className="text-xs text-red-600" onClick={() => setEntries(list.filter((_, j) => j !== i))}>
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-slate-500">
+                      {current.isLoading ? "Loading…" : "No players yet. Search above to add them."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
       {(current.error || save.error) && <ErrorBox error={current.error ?? save.error} />}
       <button className="btn-primary mt-3" disabled={save.isPending || entries === null} onClick={() => save.mutate()}>
         {save.isPending ? "Saving…" : `Save ${team.name}`}

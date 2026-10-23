@@ -112,6 +112,8 @@ describe("ESPN parsing", () => {
       "blocks",
       "offensiveRebounds",
       "defensiveRebounds",
+      "fouls",
+      "plusMinus",
     ];
     const lines = parseEspnBoxScore({
       boxscore: {
@@ -124,7 +126,7 @@ describe("ESPN parsing", () => {
                 athletes: [
                   {
                     athlete: { id: "4997536", displayName: "Gui Santos" },
-                    stats: ["25", "12", "5-10", "1-3", "1-2", "5", "0", "0", "1", "0", "2", "3"],
+                    stats: ["25", "12", "5-10", "1-3", "1-2", "5", "0", "0", "1", "0", "2", "3", "4", "-14"],
                   },
                   { athlete: { id: "1", displayName: "Bench Guy" }, stats: [], didNotPlay: true, reason: "COACH'S DECISION" },
                 ],
@@ -148,6 +150,8 @@ describe("ESPN parsing", () => {
       reb: 5,
       oreb: 2,
       dreb: 3,
+      pf: 4,
+      plusMinus: -14,
       dnpReason: null,
     });
     expect(lines[1]).toMatchObject({ minutes: 0, dnpReason: "COACH'S DECISION" });

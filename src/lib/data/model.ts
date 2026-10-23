@@ -9,7 +9,7 @@ import { getActiveRules } from "./rules";
 import { DEFAULT_RULES, type LeagueRules } from "../rules/schema";
 import { blendWindows, playProbability, DEFAULT_WEIGHTS, type Windows, type WindowWeights } from "../engine/projections";
 import { buildCategoryScorer, pointsValue, round } from "../engine/values";
-import { EMPTY_LINE, type StatKey, type StatLine } from "../stats";
+import { EMPTY_LINE, type StatLine } from "../stats";
 import { addDays, daysBetween, today, weekRange } from "../dates";
 
 export interface ModelPlayer {
@@ -64,7 +64,7 @@ export async function getLeagueSettings(leagueId: number) {
 
 export async function loadLeagueContext(
   leagueId: number,
-  opts: { date?: string; categoryWeights?: Partial<Record<StatKey, number>> } = {},
+  opts: { date?: string; categoryWeights?: Partial<Record<string, number>> } = {},
 ): Promise<LeagueContext> {
   const db = getDb();
   const date = opts.date ?? today();
@@ -154,7 +154,7 @@ async function valuePlayers(
   rules: LeagueRules,
   settings: LeagueContext["settings"],
   date: string,
-  categoryWeights?: Partial<Record<StatKey, number>>,
+  categoryWeights?: Partial<Record<string, number>>,
 ): Promise<Map<number, ModelPlayer>> {
   const db = getDb();
   const out = new Map<number, ModelPlayer>();
@@ -231,6 +231,7 @@ async function valuePlayers(
     const scorer = buildCategoryScorer(pool, rules.categories, {
       punt: settings.puntCategories,
       weights: categoryWeights,
+      custom: rules.custom_stats,
     });
     for (const p of out.values()) {
       if (!p.hasProjection) continue;

@@ -40,6 +40,8 @@ export interface NbaBoxLine {
   fta: number;
   fg3m: number;
   fg3a: number;
+  pf: number;
+  plusMinus: number;
   dnpReason: string | null;
 }
 
@@ -125,6 +127,8 @@ export function parseCdnBoxScore(body: any): NbaBoxLine[] {
         fta: s.freeThrowsAttempted ?? 0,
         fg3m: s.threePointersMade ?? 0,
         fg3a: s.threePointersAttempted ?? 0,
+        pf: s.foulsPersonal ?? 0,
+        plusMinus: Math.round(s.plusMinusPoints ?? 0),
         dnpReason: p.played === "0" ? (p.notPlayingReason ?? p.notPlayingDescription ?? "DNP") : null,
       });
     }
@@ -192,6 +196,8 @@ export class BallDontLieSource implements NbaDataSource {
           fta: s.fta ?? 0,
           fg3m: s.fg3m ?? 0,
           fg3a: s.fg3a ?? 0,
+          pf: s.pf ?? 0,
+          plusMinus: 0,
           dnpReason: null,
         });
       }
@@ -297,6 +303,8 @@ export function parseEspnBoxScore(body: any): NbaBoxLine[] {
           fta,
           fg3m,
           fg3a,
+          pf: n("fouls"),
+          plusMinus: n("plusMinus"),
           dnpReason: played ? null : (a.reason ?? "DNP"),
         });
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRulesCsv, parseRulesJson, RulesFileError } from "@/lib/rules/schema";
+import { parseRulesCsv, parseRulesJson, RulesFileError, validate } from "@/lib/rules/schema";
 
 describe("rule uploads", () => {
   it("parses the documented JSON example", () => {
@@ -60,5 +60,27 @@ describe("rule uploads", () => {
 
   it("CSV errors name the row", () => {
     expect(() => parseRulesCsv("type,key,value\nsetting,scoring_type,roto\nslot,PG,two")).toThrow(/Row 3/);
+  });
+});
+
+describe("custom stats", () => {
+  it("accepts ratio and sum categories defined in custom_stats", () => {
+    const r = validate({
+      scoring_type: "h2h_categories",
+      categories: ["PTS", "stocks", "A/T", "AST/PF"],
+      custom_stats: { STOCKS: { sum: ["ST", "BLK"] }, "AST/PF": { ratio: ["AST", "PF"] } },
+      roster_slots: { UTIL: 10 },
+    });
+    expect(r.categories).toEqual(["PTS", "STOCKS", "A/T", "AST/PF"]);
+    expect(r.custom_stats).toEqual({ STOCKS: { sum: ["STL", "BLK"] }, "AST/PF": { ratio: ["AST", "PF"] } });
+  });
+
+  it("rejects unknown categories and bad definitions", () => {
+    const bad = (custom_stats: unknown, categories = ["X"]) => () =>
+      validate({ scoring_type: "h2h_categories", categories, custom_stats, roster_slots: { UTIL: 10 } });
+    expect(bad({})).toThrow(/Unknown stat "X"/);
+    expect(bad({ X: { sum: ["PTS", "FG%"] } })).toThrow(/not a counting stat/);
+    expect(bad({ X: { sum: ["PTS", "REB"], ratio: ["PTS", "REB"] } })).toThrow(/exactly one/);
+    expect(bad({ PTS: { sum: ["PTS", "REB"] } }, ["PTS"])).toThrow(/built-in/);
   });
 });

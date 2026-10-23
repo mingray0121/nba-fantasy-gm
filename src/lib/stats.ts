@@ -20,6 +20,8 @@ export const COUNTING_STATS = {
   DD: "dd",
   TD: "td",
   MIN: "minutes",
+  PF: "pf",
+  "+/-": "plusMinus",
 } as const;
 
 export const PERCENT_STATS = {
@@ -41,7 +43,7 @@ export const STAT_KEYS = [
 ] as StatKey[];
 
 /** Stats where lower is better. */
-export const NEGATIVE_STATS = new Set<StatKey>(["TO"]);
+export const NEGATIVE_STATS = new Set<StatKey>(["TO", "PF"]);
 
 export const STAT_DISPLAY: Record<StatKey, string> = {
   PTS: "Points",
@@ -61,6 +63,8 @@ export const STAT_DISPLAY: Record<StatKey, string> = {
   DD: "Double-doubles",
   TD: "Triple-doubles",
   MIN: "Minutes",
+  PF: "Personal fouls",
+  "+/-": "Plus / minus",
   "FG%": "Field goal %",
   "FT%": "Free throw %",
   "3P%": "3-point %",
@@ -99,6 +103,10 @@ const ALIASES: Record<string, StatKey> = {
   DD: "DD",
   TD: "TD",
   MIN: "MIN",
+  PF: "PF",
+  FOULS: "PF",
+  "+/-": "+/-",
+  PLUSMINUS: "+/-",
   "FG%": "FG%",
   FGPCT: "FG%",
   "FT%": "FT%",
@@ -159,6 +167,8 @@ export const EMPTY_LINE: StatLine = {
   dd: 0,
   td: 0,
   minutes: 0,
+  pf: 0,
+  plusMinus: 0,
 };
 
 /** Value of one stat key for a stat line (percentages as 0..1, A/T as a ratio). */
@@ -168,6 +178,46 @@ export function statValue(line: StatLine, key: StatKey): number {
     return line[att] > 0 ? line[made] / line[att] : 0;
   }
   return line[COUNTING_STATS[key as CountingStatKey]];
+}
+
+/**
+ * League-defined categories built from stats the app records, e.g.
+ * {"STOCKS": {"sum": ["STL", "BLK"]}} or {"A/T": {"ratio": ["AST", "TO"]}}.
+ * A ratio is scored by impact, like a percentage.
+ */
+export type CustomStat =
+  | { ratio: [CountingStatKey, CountingStatKey]; negative?: boolean }
+  | { sum: CountingStatKey[]; negative?: boolean };
+export type CustomStats = Record<string, CustomStat>;
+
+/** Numerator and denominator of a ratio category (built-in percentage or custom ratio), else null. */
+export function ratioParts(
+  key: string,
+  custom: CustomStats = {},
+): { num: (l: StatLine) => number; den: (l: StatLine) => number } | null {
+  if (key in PERCENT_STATS) {
+    const { made, att } = PERCENT_STATS[key as PercentStatKey];
+    return { num: (l) => l[made], den: (l) => l[att] };
+  }
+  const c = custom[key];
+  if (c && "ratio" in c) {
+    const [a, b] = c.ratio.map((k) => COUNTING_STATS[k]);
+    return { num: (l) => l[a], den: (l) => l[b] };
+  }
+  return null;
+}
+
+/** Value of a category (built-in or custom) for a stat line. */
+export function categoryValue(line: StatLine, key: string, custom: CustomStats = {}): number {
+  const c = custom[key];
+  if (c && "sum" in c) return c.sum.reduce((s, k) => s + line[COUNTING_STATS[k]], 0);
+  const r = c ? ratioParts(key, custom) : null;
+  if (r) return r.den(line) > 0 ? r.num(line) / r.den(line) : 0;
+  return statValue(line, key as StatKey);
+}
+
+export function isNegativeCategory(key: string, custom: CustomStats = {}): boolean {
+  return custom[key] ? Boolean(custom[key].negative) : NEGATIVE_STATS.has(key as StatKey);
 }
 
 export function addLines(a: StatLine, b: StatLine, scaleB = 1): StatLine {

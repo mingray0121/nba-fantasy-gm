@@ -113,6 +113,7 @@ export function parseLeagueSettings(body: Y): { rules: LeagueRules; meta: Record
     rules: {
       scoring_type,
       categories,
+      custom_stats: {},
       point_weights,
       roster_slots,
       games_played_limit: maxGames != null && Number(maxGames) > 0 ? Number(maxGames) : null,

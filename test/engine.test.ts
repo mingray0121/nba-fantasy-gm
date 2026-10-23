@@ -177,3 +177,15 @@ describe("A/T category", () => {
     expect(score(at(5, 0)).total).toBeGreaterThan(score(at(5, 5)).total);
   });
 });
+
+describe("custom categories", () => {
+  it("scores a custom sum and a negative custom ratio", () => {
+    const custom = { STOCKS: { sum: ["STL", "BLK"] as ["STL", "BLK"] }, "TO/A": { ratio: ["TO", "AST"] as ["TO", "AST"], negative: true } };
+    const pool = [line({ stl: 1, blk: 1, tov: 2, ast: 4 }), line({ stl: 2, blk: 0, tov: 1, ast: 6 }), line({ stl: 0, blk: 3, tov: 3, ast: 3 })];
+    const score = buildCategoryScorer(pool, ["STOCKS", "TO/A"], { custom });
+    const good = score(line({ stl: 3, blk: 3, tov: 1, ast: 8 }));
+    const bad = score(line({ stl: 0, blk: 0, tov: 4, ast: 2 }));
+    expect(good.z.STOCKS).toBeGreaterThan(bad.z.STOCKS);
+    expect(good.z["TO/A"]).toBeGreaterThan(bad.z["TO/A"]);
+  });
+});

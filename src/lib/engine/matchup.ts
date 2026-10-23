@@ -1,34 +1,47 @@
-import { NEGATIVE_STATS, PERCENT_STATS, statValue, type PercentStatKey, type StatKey, type StatLine } from "../stats";
+import {
+  PERCENT_STATS,
+  categoryValue,
+  isNegativeCategory,
+  ratioParts,
+  type CustomStats,
+  type PercentStatKey,
+  type StatKey,
+  type StatLine,
+} from "../stats";
 import { round } from "./values";
 
 export type CategoryState = "winning" | "losing" | "close";
 
 export interface CategoryProjection {
-  key: StatKey;
+  key: string;
   mine: number;
   opponent: number;
   state: CategoryState;
   decided: boolean; // margin big enough that more effort barely matters
 }
 
+type ToDate = Partial<Record<string, number>>;
+
 /**
  * Projects final category totals as stats so far plus projected remaining
- * starts. Percentages use makes and attempts when Yahoo reports them; when it
- * only reports the percentage, it's weighted with the projection by how much of
- * the week's attempts are still to come.
+ * starts. Ratios use their makes and attempts when Yahoo reports them; when it
+ * only reports the ratio, it's weighted with the projection by how much of
+ * the week is still to come.
  */
 export function projectCategories(input: {
-  categories: StatKey[];
-  myToDate: Partial<Record<StatKey, number>>;
-  oppToDate: Partial<Record<StatKey, number>>;
+  categories: string[];
+  myToDate: ToDate;
+  oppToDate: ToDate;
   myRemaining: StatLine;
   oppRemaining: StatLine;
   weekFractionLeft: number;
+  custom?: CustomStats;
 }): CategoryProjection[] {
+  const custom = input.custom ?? {};
   return input.categories.map((key) => {
-    const mine = finalValue(key, input.myToDate, input.myRemaining, input.weekFractionLeft);
-    const opponent = finalValue(key, input.oppToDate, input.oppRemaining, input.weekFractionLeft);
-    const better = NEGATIVE_STATS.has(key) ? opponent - mine : mine - opponent;
+    const mine = finalValue(key, input.myToDate, input.myRemaining, input.weekFractionLeft, custom);
+    const opponent = finalValue(key, input.oppToDate, input.oppRemaining, input.weekFractionLeft, custom);
+    const better = isNegativeCategory(key, custom) ? opponent - mine : mine - opponent;
     let margin: number;
     let closeAt: number;
     let decidedAt: number;
@@ -52,7 +65,7 @@ export function projectCategories(input: {
   });
 }
 
-/** Week-to-date counting stats behind each ratio category. */
+/** Week-to-date counting stats behind each built-in ratio category. */
 const TO_DATE_PARTS: Record<PercentStatKey, [StatKey, StatKey]> = {
   "FG%": ["FGM", "FGA"],
   "FT%": ["FTM", "FTA"],
@@ -60,32 +73,32 @@ const TO_DATE_PARTS: Record<PercentStatKey, [StatKey, StatKey]> = {
   "A/T": ["AST", "TO"],
 };
 
-function finalValue(
-  key: StatKey,
-  toDate: Partial<Record<StatKey, number>>,
-  remaining: StatLine,
-  fractionLeft: number,
-): number {
-  if (key in PERCENT_STATS) {
-    const { made, att } = PERCENT_STATS[key as PercentStatKey];
-    const [madeKey, attKey] = TO_DATE_PARTS[key as PercentStatKey];
+function finalValue(key: string, toDate: ToDate, remaining: StatLine, fractionLeft: number, custom: CustomStats): number {
+  const def = custom[key];
+  if (def && "sum" in def) {
+    const sofar = toDate[key] ?? def.sum.reduce((s, k) => s + (toDate[k] ?? 0), 0);
+    return sofar + categoryValue(remaining, key, custom);
+  }
+  const parts = ratioParts(key, custom);
+  if (parts) {
+    const [madeKey, attKey] = def && "ratio" in def ? def.ratio : TO_DATE_PARTS[key as PercentStatKey];
     const m0 = toDate[madeKey];
     const a0 = toDate[attKey];
     if (m0 != null && a0 != null) {
-      const a = a0 + remaining[att];
-      return a > 0 ? (m0 + remaining[made]) / a : 0;
+      const a = a0 + parts.den(remaining);
+      return a > 0 ? (m0 + parts.num(remaining)) / a : 0;
     }
-    const projected = statValue(remaining, key);
+    const projected = categoryValue(remaining, key, custom);
     const sofar = toDate[key];
     if (sofar == null || sofar === 0) return projected;
     return sofar * (1 - fractionLeft) + projected * fractionLeft;
   }
-  return (toDate[key] ?? 0) + statValue(remaining, key);
+  return (toDate[key] ?? 0) + categoryValue(remaining, key, custom);
 }
 
 /** Close categories count more, decided ones less. */
-export function matchupWeights(projections: CategoryProjection[]): Partial<Record<StatKey, number>> {
-  const w: Partial<Record<StatKey, number>> = {};
+export function matchupWeights(projections: CategoryProjection[]): Partial<Record<string, number>> {
+  const w: Partial<Record<string, number>> = {};
   for (const p of projections) w[p.key] = p.decided ? 0.5 : p.state === "close" ? 1.5 : 1;
   return w;
 }

@@ -1,8 +1,10 @@
 import {
-  NEGATIVE_STATS,
   PERCENT_STATS,
+  categoryValue,
+  isNegativeCategory,
+  ratioParts,
   statValue,
-  type PercentStatKey,
+  type CustomStats,
   type StatKey,
   type StatLine,
 } from "../stats";
@@ -25,7 +27,7 @@ export interface CategoryScore {
 interface CatStats {
   mean: number;
   sd: number;
-  pct?: number; // pool percentage (or ratio) for FG%/FT%/3P%/A/T
+  pct?: number; // pool percentage (or ratio) for ratio categories
 }
 
 /**
@@ -37,24 +39,25 @@ interface CatStats {
  */
 export function buildCategoryScorer(
   pool: StatLine[],
-  categories: StatKey[],
-  opts: { punt?: string[]; weights?: Partial<Record<StatKey, number>> } = {},
+  categories: string[],
+  opts: { punt?: string[]; weights?: Partial<Record<string, number>>; custom?: CustomStats } = {},
 ) {
+  const custom = opts.custom ?? {};
   const active = categories.filter((c) => !opts.punt?.includes(c));
-  const stats = new Map<StatKey, CatStats>();
+  const stats = new Map<string, CatStats>();
 
   for (const cat of active) {
+    const parts = ratioParts(cat, custom);
     let raw: number[];
     let pct: number | undefined;
-    if (cat in PERCENT_STATS) {
-      const { made, att } = PERCENT_STATS[cat as PercentStatKey];
-      const totalMade = pool.reduce((s, l) => s + l[made], 0);
-      const totalAtt = pool.reduce((s, l) => s + l[att], 0);
-      pct = totalAtt > 0 ? totalMade / totalAtt : 0;
+    if (parts) {
+      const totalNum = pool.reduce((s, l) => s + parts.num(l), 0);
+      const totalDen = pool.reduce((s, l) => s + parts.den(l), 0);
+      pct = totalDen > 0 ? totalNum / totalDen : 0;
       // attempts x (player % - pool %), written so a ratio with 0 attempts (A/T with no turnovers) still counts.
-      raw = pool.map((l) => l[made] - pct! * l[att]);
+      raw = pool.map((l) => parts.num(l) - pct! * parts.den(l));
     } else {
-      raw = pool.map((l) => statValue(l, cat));
+      raw = pool.map((l) => categoryValue(l, cat, custom));
     }
     const mean = raw.reduce((s, v) => s + v, 0) / Math.max(raw.length, 1);
     const variance = raw.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(raw.length, 1);
@@ -66,15 +69,10 @@ export function buildCategoryScorer(
     let total = 0;
     for (const cat of active) {
       const s = stats.get(cat)!;
-      let v: number;
-      if (s.pct !== undefined) {
-        const { made, att } = PERCENT_STATS[cat as PercentStatKey];
-        v = line[made] - s.pct * line[att];
-      } else {
-        v = statValue(line, cat);
-      }
+      const parts = ratioParts(cat, custom);
+      const v = parts && s.pct !== undefined ? parts.num(line) - s.pct * parts.den(line) : categoryValue(line, cat, custom);
       let score = (v - s.mean) / s.sd;
-      if (NEGATIVE_STATS.has(cat)) score = -score;
+      if (isNegativeCategory(cat, custom)) score = -score;
       score *= opts.weights?.[cat] ?? 1;
       z[cat] = round(score);
       total += score;

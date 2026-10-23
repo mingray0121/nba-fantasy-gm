@@ -169,6 +169,8 @@ export async function syncBoxScores(opts: { limit?: number } = {}): Promise<JobR
         fta: l.fta,
         fg3m: l.fg3m,
         fg3a: l.fg3a,
+        pf: l.pf,
+        plusMinus: l.plusMinus,
         dnpReason: l.dnpReason,
       });
     }
@@ -179,7 +181,7 @@ export async function syncBoxScores(opts: { limit?: number } = {}): Promise<JobR
         .onConflictDoUpdate({
           target: [schema.playerGameLogs.playerId, schema.playerGameLogs.gameId],
           set: Object.fromEntries(
-            ["minutes", "pts", "reb", "oreb", "dreb", "ast", "stl", "blk", "tov", "fgm", "fga", "ftm", "fta", "fg3m", "fg3a", "dnp_reason"].map(
+            ["minutes", "pts", "reb", "oreb", "dreb", "ast", "stl", "blk", "tov", "fgm", "fga", "ftm", "fta", "fg3m", "fg3a", "pf", "plus_minus", "dnp_reason"].map(
               (c) => [toCamel(c), sql.raw(`excluded.${c}`)],
             ),
           ),
@@ -374,7 +376,7 @@ export async function computeProjections(asOf = today()): Promise<JobResult> {
       .onConflictDoUpdate({
         target: [schema.playerProjections.playerId, schema.playerProjections.asOfDate, schema.playerProjections.horizon],
         set: Object.fromEntries(
-          ["games_in_window", "minutes", "pts", "reb", "oreb", "dreb", "ast", "stl", "blk", "tov", "fgm", "fga", "ftm", "fta", "fg3m", "fg3a", "dd", "td", "games_remaining"].map(
+          ["games_in_window", "minutes", "pts", "reb", "oreb", "dreb", "ast", "stl", "blk", "tov", "fgm", "fga", "ftm", "fta", "fg3m", "fg3a", "dd", "td", "pf", "plus_minus", "games_remaining"].map(
             (c) => [toCamel(c), sql.raw(`excluded.${c}`)],
           ),
         ),
