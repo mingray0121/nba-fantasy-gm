@@ -9,6 +9,14 @@ function fail(req: NextRequest, reason: string) {
 }
 
 export async function GET(req: NextRequest) {
+  // TEMPORARY debugging aid: with state=debug, show the code instead of using it,
+  // so it can be exchanged and tested from another machine. The code is useless
+  // without the client secret. Remove once Yahoo sign-in works.
+  if (req.nextUrl.searchParams.get("state") === "debug") {
+    return new NextResponse(`code: ${req.nextUrl.searchParams.get("code") ?? "(none)"}`, {
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
   try {
     return await signIn(req);
   } catch (err) {
