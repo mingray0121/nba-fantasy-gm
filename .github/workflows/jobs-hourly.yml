@@ -1,0 +1,20 @@
+# Hourly: matchup scores. Every 2 hours: free agents.
+name: jobs-hourly
+on:
+  schedule:
+    - cron: "5 * * * *"
+    - cron: "35 */2 * * *"
+  workflow_dispatch:
+jobs:
+  matchup:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '5 * * * *' }}
+    uses: ./.github/workflows/_call-job.yml
+    with:
+      jobs: matchup-sync
+    secrets: inherit
+  free-agents:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '35 */2 * * *' }}
+    uses: ./.github/workflows/_call-job.yml
+    with:
+      jobs: free-agents values
+    secrets: inherit

@@ -1,4 +1,4 @@
-# NBA Fantasy Lineup Assistant
+# nba-fantasy-gm: NBA Fantasy Lineup Assistant
 
 Start / bench / add / drop help for Yahoo Fantasy NBA. One user, many leagues, each league isolated with its own versioned rules. Next.js (TypeScript) on Vercel, Neon Postgres, GitHub Actions for the refresh jobs.
 
@@ -98,16 +98,62 @@ League jobs loop through your leagues one at a time, so one failing league never
 
 ### Local development
 
+This is a TypeScript / Node.js project, so there is no Python `venv` or Poetry. The npm equivalents:
+
+| Python | This project |
+| --- | --- |
+| `pyenv` / `.python-version` | `nvm` / `.nvmrc` (Node 22) |
+| `venv` | `node_modules/` inside the project folder (created by `npm install`, git-ignored) |
+| `pyproject.toml` | `package.json` |
+| `poetry.lock` | `package-lock.json` (exact versions; commit it) |
+| `poetry install` | `npm ci` |
+| `poetry add x` / `poetry add --group dev x` | `npm install x` / `npm install -D x` |
+| `poetry run x` | `npm run x` / `npx x` |
+
+Everything installs into the project folder, never globally, so it is already isolated like a venv.
+
+**1. Install Node 22 with nvm** (once per machine):
+
 ```bash
-npm install
-cp .env.example .env.local      # fill in values
-npm run db:migrate              # against DATABASE_URL
-npm run dev
-npm run job -- schedule         # run any job locally
-npm run job -- roster-sync 1    # a league job for league 1
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash   # or: brew install nvm
+nvm install        # reads .nvmrc
+nvm use
 ```
 
-A local Postgres works too: a `DATABASE_URL` on `localhost` uses the node-postgres driver instead of Neon's.
+**2. Install dependencies** (exact versions from `package-lock.json`):
+
+```bash
+npm ci
+```
+
+**3. Environment variables.** Copy the template and fill it in. `.env.local` is git-ignored and never leaves your machine:
+
+```bash
+cp .env.example .env.local
+```
+
+You need a Postgres database for `DATABASE_URL`: a Neon branch (free), or a local one, e.g. `brew install postgresql@16 && createdb nfa` then `DATABASE_URL=postgres://localhost/nfa`. A `localhost` URL uses the node-postgres driver instead of Neon's.
+
+For Yahoo sign-in locally, Yahoo requires an HTTPS redirect: run a tunnel such as `ngrok http 3000`, register `https://<tunnel>/api/auth/yahoo/callback` on your Yahoo app, and put the same URL in `YAHOO_REDIRECT_URI`.
+
+**4. Create the tables, run the app, run jobs:**
+
+```bash
+npm run db:migrate              # applies drizzle/ migrations to DATABASE_URL
+npm run dev                     # http://localhost:3000
+npm run job -- schedule         # load the NBA schedule
+npm run job -- box-scores       # box scores (repeat to catch up)
+npm run job -- projections
+npm run job -- roster-sync 1    # league jobs take a league id
+```
+
+**Checks:**
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
 
 ### Tests
 

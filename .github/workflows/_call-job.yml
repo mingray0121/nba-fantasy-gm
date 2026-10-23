@@ -1,0 +1,36 @@
+# Reusable workflow: POSTs to /api/jobs/<job> on the deployed app, one job after another.
+name: call-job
+on:
+  workflow_call:
+    inputs:
+      jobs:
+        description: Space-separated job names, run in order
+        required: true
+        type: string
+    secrets:
+      APP_URL:
+        required: true
+      JOB_TOKEN:
+        required: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Call job routes
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          JOB_TOKEN: ${{ secrets.JOB_TOKEN }}
+        run: |
+          status=0
+          for job in ${{ inputs.jobs }}; do
+            echo "::group::$job"
+            code=$(curl -sS -o out.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $JOB_TOKEN" \
+              --max-time 310 "$APP_URL/api/jobs/$job") || code=000
+            cat out.json; echo
+            echo "::endgroup::"
+            if [ "$code" != "200" ]; then echo "::error::$job returned $code"; status=1; fi
+          done
+          exit $status

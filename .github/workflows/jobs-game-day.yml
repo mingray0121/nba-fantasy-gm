@@ -1,0 +1,13 @@
+# Every 15 min from ~10:00 ET to past the last tip-off: rosters, injuries, values.
+name: jobs-game-day
+on:
+  schedule:
+    - cron: "*/15 14-23 * * *"
+    - cron: "*/15 0-4 * * *"
+  workflow_dispatch:
+jobs:
+  run:
+    uses: ./.github/workflows/_call-job.yml
+    with:
+      jobs: roster-sync injuries values
+    secrets: inherit

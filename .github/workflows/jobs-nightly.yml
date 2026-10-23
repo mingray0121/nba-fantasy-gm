@@ -1,0 +1,21 @@
+# Nightly ~4:00-5:00 ET: box scores (with catch-up), projections, values.
+# 6:00 ET: schedule and rules import.
+name: jobs-nightly
+on:
+  schedule:
+    - cron: "0 9 * * *"
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+jobs:
+  stats:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '0 9 * * *' }}
+    uses: ./.github/workflows/_call-job.yml
+    with:
+      jobs: box-scores box-scores box-scores projections values
+    secrets: inherit
+  daily:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '0 10 * * *' }}
+    uses: ./.github/workflows/_call-job.yml
+    with:
+      jobs: schedule rules-import roster-sync free-agents values
+    secrets: inherit
