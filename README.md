@@ -11,7 +11,7 @@ Every recommendation comes from one idea: **a per-player value under that league
 | `src/db/schema.ts` | Drizzle schema, 22 tables (21 from the design plus `player_id_overrides`) |
 | `drizzle/` | Generated SQL migrations (`npm run db:generate` after schema changes) |
 | `src/lib/yahoo/` | OAuth 2.0 (tokens AES-256-GCM encrypted at rest) and a read-only Fantasy API client + JSON parsers |
-| `src/lib/nba/` | NBA CDN schedule and box scores, balldontlie fallback, behind one `NbaDataSource` interface |
+| `src/lib/nba/` | Schedule and box scores from ESPN's public API (the NBA CDN blocks cloud hosts and non-US networks), balldontlie fallback, behind one `NbaDataSource` interface |
 | `src/lib/rules/` | Rule format (JSON and CSV upload), validation, normalization of Yahoo stat names and slots |
 | `src/lib/engine/` | Pure logic: projections, points / z-score values, exact lineup optimizer, matchup projection, add/drop pairing |
 | `src/lib/data/` | Per-league data loading and the read models behind each page |

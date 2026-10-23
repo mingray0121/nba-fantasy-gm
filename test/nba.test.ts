@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCdnBoxScore, parseCdnSchedule, parseIsoMinutes } from "@/lib/nba/client";
+import { parseCdnBoxScore, parseCdnSchedule, parseEspnBoxScore, parseEspnSchedule, parseIsoMinutes } from "@/lib/nba/client";
 import { matchPlayer, normalizeName, nbaTeamAbbr } from "@/lib/players/match";
 
 describe("NBA CDN parsing", () => {
@@ -70,5 +70,86 @@ describe("player matching", () => {
     ];
     expect(matchPlayer({ name: "Jalen Williams", teamAbbr: "OKC" }, c)?.id).toBe(1);
     expect(matchPlayer({ name: "Jalen Williams", teamAbbr: null }, c)).toBeNull();
+  });
+});
+
+describe("ESPN parsing", () => {
+  it("parses a team schedule with NBA tricodes and Eastern game dates", () => {
+    const games = parseEspnSchedule({
+      events: [
+        {
+          id: "401909092",
+          date: "2026-10-22T02:00Z",
+          seasonType: { type: 2 },
+          competitions: [
+            {
+              status: { type: { state: "post" } },
+              competitors: [
+                { homeAway: "home", team: { id: "13", abbreviation: "LAL", displayName: "Los Angeles Lakers" } },
+                { homeAway: "away", team: { id: "9", abbreviation: "GS", displayName: "Golden State Warriors" } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(games).toHaveLength(1);
+    expect(games[0]).toMatchObject({ nbaGameId: "401909092", gameDate: "2026-10-21", status: "final", gameType: "regular" });
+    expect(games[0].away).toEqual({ nbaTeamId: 9, abbreviation: "GSW", name: "Golden State Warriors" });
+  });
+
+  it("parses box scores, including DNPs", () => {
+    const keys = [
+      "minutes",
+      "points",
+      "fieldGoalsMade-fieldGoalsAttempted",
+      "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+      "freeThrowsMade-freeThrowsAttempted",
+      "rebounds",
+      "assists",
+      "turnovers",
+      "steals",
+      "blocks",
+      "offensiveRebounds",
+      "defensiveRebounds",
+    ];
+    const lines = parseEspnBoxScore({
+      boxscore: {
+        players: [
+          {
+            team: { abbreviation: "GS" },
+            statistics: [
+              {
+                keys,
+                athletes: [
+                  {
+                    athlete: { id: "4997536", displayName: "Gui Santos" },
+                    stats: ["25", "12", "5-10", "1-3", "1-2", "5", "0", "0", "1", "0", "2", "3"],
+                  },
+                  { athlete: { id: "1", displayName: "Bench Guy" }, stats: [], didNotPlay: true, reason: "COACH'S DECISION" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(lines[0]).toMatchObject({
+      nbaPlayerId: 4997536,
+      teamAbbr: "GSW",
+      minutes: 25,
+      pts: 12,
+      fgm: 5,
+      fga: 10,
+      fg3m: 1,
+      fg3a: 3,
+      ftm: 1,
+      fta: 2,
+      reb: 5,
+      oreb: 2,
+      dreb: 3,
+      dnpReason: null,
+    });
+    expect(lines[1]).toMatchObject({ minutes: 0, dnpReason: "COACH'S DECISION" });
   });
 });

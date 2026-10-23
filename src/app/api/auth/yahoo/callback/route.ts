@@ -9,6 +9,15 @@ function fail(req: NextRequest, reason: string) {
 }
 
 export async function GET(req: NextRequest) {
+  try {
+    return await signIn(req);
+  } catch (err) {
+    console.error("Yahoo sign-in failed", err);
+    return fail(req, `Sign-in failed: ${(err as Error).message}`.slice(0, 300));
+  }
+}
+
+async function signIn(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   if (!code || !state || state !== req.cookies.get("nfa_oauth_state")?.value) {

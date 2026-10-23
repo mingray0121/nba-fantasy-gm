@@ -201,8 +201,138 @@ export class BallDontLieSource implements NbaDataSource {
   }
 }
 
+const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+
+/** ESPN season types: 1 preseason, 2 regular, 3 postseason, 5 play-in. */
+const ESPN_SEASON_TYPES: Record<number, NbaScheduledGame["gameType"]> = {
+  1: "preseason",
+  2: "regular",
+  3: "playoffs",
+  5: "playin",
+};
+
+/** ESPN abbreviations that differ from NBA tricodes. */
+const ESPN_TO_NBA_TEAM: Record<string, string> = {
+  GS: "GSW",
+  NO: "NOP",
+  NY: "NYK",
+  SA: "SAS",
+  UTAH: "UTA",
+  WSH: "WAS",
+};
+
+export function espnTeamAbbr(abbr: string): string {
+  const up = String(abbr).toUpperCase();
+  return ESPN_TO_NBA_TEAM[up] ?? up;
+}
+
+function espnTeamInfo(t: any): NbaTeamInfo {
+  return {
+    nbaTeamId: Number(t.id),
+    abbreviation: espnTeamAbbr(t.abbreviation),
+    name: t.displayName ?? [t.location, t.name].filter(Boolean).join(" "),
+  };
+}
+
+/** One team's schedule from ESPN (`/teams/{id}/schedule`). */
+export function parseEspnSchedule(body: any): NbaScheduledGame[] {
+  const out: NbaScheduledGame[] = [];
+  for (const e of body.events ?? []) {
+    const c = e.competitions?.[0];
+    const home = c?.competitors?.find((t: any) => t.homeAway === "home");
+    const away = c?.competitors?.find((t: any) => t.homeAway === "away");
+    if (!home?.team?.id || !away?.team?.id) continue;
+    const tip = e.date ? new Date(e.date) : null;
+    const state = c.status?.type?.state;
+    out.push({
+      nbaGameId: String(e.id),
+      gameDate: tip ? toLocalDate(tip, "America/New_York") : "",
+      tipTime: tip,
+      home: espnTeamInfo(home.team),
+      away: espnTeamInfo(away.team),
+      status: state === "post" ? "final" : state === "in" ? "live" : "scheduled",
+      gameType: ESPN_SEASON_TYPES[Number(e.seasonType?.type ?? 2)] ?? "regular",
+    });
+  }
+  return out;
+}
+
+/** "5-10" -> [5, 10] */
+function madeAttempted(v: string | undefined): [number, number] {
+  const [m, a] = String(v ?? "0-0").split("-");
+  return [Number(m) || 0, Number(a) || 0];
+}
+
+/** Box score from ESPN's game summary (`/summary?event={id}`). */
+export function parseEspnBoxScore(body: any): NbaBoxLine[] {
+  const out: NbaBoxLine[] = [];
+  for (const side of body.boxscore?.players ?? []) {
+    const teamAbbr = espnTeamAbbr(side.team?.abbreviation ?? "");
+    for (const group of side.statistics ?? []) {
+      const keys: string[] = group.keys ?? [];
+      for (const a of group.athletes ?? []) {
+        const stats: string[] = a.stats ?? [];
+        const v = (key: string) => stats[keys.indexOf(key)];
+        const n = (key: string) => Number(v(key)) || 0;
+        const [fgm, fga] = madeAttempted(v("fieldGoalsMade-fieldGoalsAttempted"));
+        const [fg3m, fg3a] = madeAttempted(v("threePointFieldGoalsMade-threePointFieldGoalsAttempted"));
+        const [ftm, fta] = madeAttempted(v("freeThrowsMade-freeThrowsAttempted"));
+        const played = !a.didNotPlay && stats.length > 0;
+        out.push({
+          nbaPlayerId: Number(a.athlete?.id) || null,
+          name: a.athlete?.displayName ?? "",
+          teamAbbr,
+          minutes: n("minutes"),
+          pts: n("points"),
+          reb: n("rebounds"),
+          oreb: n("offensiveRebounds"),
+          dreb: n("defensiveRebounds"),
+          ast: n("assists"),
+          stl: n("steals"),
+          blk: n("blocks"),
+          tov: n("turnovers"),
+          fgm,
+          fga,
+          ftm,
+          fta,
+          fg3m,
+          fg3a,
+          dnpReason: played ? null : (a.reason ?? "DNP"),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * ESPN's public site API. Unlike the NBA CDN, it does not block cloud hosts
+ * (Vercel, GitHub Actions) or requests from outside the US.
+ * Player and team ids are ESPN's, stored in the nba_* id columns.
+ */
+export class EspnSource implements NbaDataSource {
+  async schedule() {
+    const teams = await getJson(`${ESPN_BASE}/teams`);
+    const teamIds: string[] = (teams.sports?.[0]?.leagues?.[0]?.teams ?? []).map((t: any) => String(t.team.id));
+    const byId = new Map<string, NbaScheduledGame>();
+    for (const seasonType of [2, 5, 3]) {
+      const bodies = await Promise.all(
+        teamIds.map((id) => getJson(`${ESPN_BASE}/teams/${id}/schedule?seasontype=${seasonType}`).catch(() => null)),
+      );
+      for (const body of bodies) {
+        for (const g of body ? parseEspnSchedule(body) : []) byId.set(g.nbaGameId, g);
+      }
+    }
+    return [...byId.values()];
+  }
+
+  async boxScore(game: { nbaGameId: string }) {
+    return parseEspnBoxScore(await getJson(`${ESPN_BASE}/summary?event=${game.nbaGameId}`));
+  }
+}
+
 export function primarySource(): NbaDataSource {
-  return new NbaCdnSource();
+  return new EspnSource();
 }
 
 export function fallbackSource(): BallDontLieSource | null {
