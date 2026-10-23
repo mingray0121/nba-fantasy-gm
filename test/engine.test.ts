@@ -189,3 +189,26 @@ describe("custom categories", () => {
     expect(good.z["TO/A"]).toBeGreaterThan(bad.z["TO/A"]);
   });
 });
+
+describe("trade finder", () => {
+  it("finds a swap where each side fills its weaker category, and none that hurts the partner", async () => {
+    const { findTrades } = await import("@/lib/engine/trades");
+    const p = (id: number, z: Record<string, number>, positions = ["C"]) => ({
+      playerId: id,
+      name: `P${id}`,
+      positions,
+      categoryZ: z,
+      gamesRemaining: 60,
+      tradeable: true,
+    });
+    // I'm strong in PTS, weak in BLK; they're the opposite.
+    const me = { teamId: 1, name: "Me", players: [p(1, { PTS: 2, BLK: -1 }), p(2, { PTS: 1.5, BLK: -0.5 }), p(3, { PTS: 0.2, BLK: 1.2 })] };
+    const them = { teamId: 2, name: "Them", players: [p(4, { PTS: -1, BLK: 2 }), p(5, { PTS: -0.5, BLK: 1.5 }), p(6, { PTS: 1.2, BLK: 0.2 })] };
+    const ideas = findTrades({ me, others: [them], categories: ["PTS", "BLK"], rosterSlots: { C: 1, BN: 2 } });
+    expect(ideas.length).toBeGreaterThan(0);
+    for (const t of ideas) {
+      expect(t.myGain).toBeGreaterThan(0);
+      expect(t.partnerGain).toBeGreaterThanOrEqual(0);
+    }
+  });
+});

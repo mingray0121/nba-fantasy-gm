@@ -21,7 +21,7 @@ export function LeagueNav({ league, leagues }: Props) {
     ["today", "Today"],
     ["week", "Week"],
     ["matchup", "Matchup"],
-    ["add-drop", "Add / drop"],
+    ["suggestions", "Suggestions"],
     ...(league.source === "manual"
       ? [
           ["roster", "Roster"],
