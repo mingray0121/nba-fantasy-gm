@@ -519,6 +519,21 @@ export async function addDropView(leagueId: number) {
 /* Player detail                                                       */
 /* ------------------------------------------------------------------ */
 
+/** Adds the opponent (e.g. "@BOS") to each game log row. */
+async function withOpponents<T extends { gameId: number }>(logs: T[], teamId: number | null) {
+  if (logs.length === 0) return [];
+  const db = getDb();
+  const games = await db.select().from(schema.nbaGames).where(inArray(schema.nbaGames.id, logs.map((l) => l.gameId)));
+  const teams = new Map((await db.select().from(schema.nbaTeams)).map((t) => [t.id, t.abbreviation]));
+  const byId = new Map(games.map((g) => [g.id, g]));
+  return logs.map((l) => {
+    const g = byId.get(l.gameId);
+    const home = g ? g.homeTeamId === teamId : true;
+    const opp = g ? teams.get(home ? g.awayTeamId : g.homeTeamId) : null;
+    return { ...l, opponent: opp ? `${home ? "vs" : "@"} ${opp}` : null };
+  });
+}
+
 export async function playerView(playerId: number, leagueId?: number) {
   const db = getDb();
   const [player] = await db
@@ -570,7 +585,7 @@ export async function playerView(playerId: number, leagueId?: number) {
       last7: { games: windows.last7.games, ...fmt(windows.last7.line) },
       projection: fmt(blendWindows(windows, DEFAULT_WEIGHTS)),
     },
-    gameLog: logs.slice(0, 20),
+    gameLog: await withOpponents(logs.slice(0, 20), player.nbaTeamId),
     schedule,
     league,
   };

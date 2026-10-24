@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
-import { Badge, Empty, ErrorBox, Loading, PageTitle, SlotPill } from "../ui";
+import { Badge, Empty, ErrorBox, Loading, PageTitle, PlayerLink, SlotPill } from "../ui";
 import type { LineupRow } from "@/lib/data/views";
 import type { AddDropSuggestion } from "@/lib/engine/addDrop";
 import type { TradeIdea } from "@/lib/engine/trades";
@@ -57,7 +57,7 @@ export function SuggestionsView({ leagueId }: { leagueId: number }) {
               {d.lineup.changes.map((r) => (
                 <li key={r.playerId} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
                   <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "Start" : "Bench"}</Badge>
-                  <span className="font-medium">{r.name}</span>
+                  <PlayerLink id={r.playerId} name={r.name} leagueId={leagueId} className="font-medium" />
                   <span className="ml-auto flex items-center gap-1 text-xs text-slate-500">
                     <SlotPill slot={r.currentSlot} muted />→<SlotPill slot={r.action === "start" ? r.recommendedSlot : "BN"} />
                   </span>
@@ -106,8 +106,8 @@ export function SuggestionsView({ leagueId }: { leagueId: number }) {
               <tbody>
                 {fa.swaps.map((s) => (
                   <tr key={`${s.add.playerId}-${s.drop.playerId}`}>
-                    <td className="font-medium text-emerald-700 dark:text-emerald-400">+ {s.add.name}</td>
-                    <td className="text-rose-600">− {s.drop.name}</td>
+                    <td className="font-medium text-emerald-700 dark:text-emerald-400">+ <PlayerLink id={s.add.playerId} name={s.add.name} leagueId={leagueId} /></td>
+                    <td className="text-rose-600">− <PlayerLink id={s.drop.playerId} name={s.drop.name} leagueId={leagueId} /></td>
                     <td className="text-right font-medium">
                       {s.restOfWeekGain > 0 ? "+" : ""}
                       {s.restOfWeekGain.toFixed(2)}
@@ -141,7 +141,7 @@ export function SuggestionsView({ leagueId }: { leagueId: number }) {
                     <div className="mb-1 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">You give</div>
                     {t.give.map((p) => (
                       <div key={p.playerId} className="text-rose-600">
-                        − {p.name}
+                        − <PlayerLink id={p.playerId} name={p.name} leagueId={leagueId} />
                       </div>
                     ))}
                   </div>
@@ -149,7 +149,7 @@ export function SuggestionsView({ leagueId }: { leagueId: number }) {
                     <div className="mb-1 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">You get</div>
                     {t.get.map((p) => (
                       <div key={p.playerId} className="font-medium text-emerald-700 dark:text-emerald-400">
-                        + {p.name}
+                        + <PlayerLink id={p.playerId} name={p.name} leagueId={leagueId} />
                       </div>
                     ))}
                   </div>

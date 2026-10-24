@@ -21,6 +21,11 @@ const COLS = [
   ["fta", "FTA"],
 ] as const;
 
+const GAME_COLS = ["MIN", "PTS", "REB", "AST", "ST", "BLK", "TO", "FGM/A", "FTM/A", "3PM/A", "A/T"];
+
+/** ".455", or "-" with no attempts. */
+const pct = (made: number, att: number) => (att > 0 ? (made / att).toFixed(3).replace(/^0/, "") : "-");
+
 export default async function PlayerPage({
   params,
   searchParams,
@@ -111,7 +116,7 @@ export default async function PlayerPage({
         </table>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4">
         <section className="card p-4 text-sm">
           <h2 className="mb-2 font-semibold">Next 7 days</h2>
           {v.schedule.length === 0 && <p className="text-slate-500">No games.</p>}
@@ -130,13 +135,14 @@ export default async function PlayerPage({
             </p>
           )}
         </section>
-        <section className="card overflow-x-auto md:col-span-2">
-          <h2 className="px-3 pt-3 font-semibold">Recent games</h2>
+        <section className="card order-first overflow-x-auto">
+          <h2 className="px-3 pt-3 font-semibold">Previous games</h2>
           <table className="table-base">
             <thead>
               <tr>
                 <th>Date</th>
-                {COLS.map(([, l]) => (
+                <th>Opp</th>
+                {GAME_COLS.map((l) => (
                   <th key={l} className="text-right">
                     {l}
                   </th>
@@ -144,14 +150,42 @@ export default async function PlayerPage({
               </tr>
             </thead>
             <tbody>
+              {v.gameLog.length === 0 && (
+                <tr>
+                  <td colSpan={GAME_COLS.length + 2} className="text-slate-500">
+                    No games yet this season.
+                  </td>
+                </tr>
+              )}
               {v.gameLog.map((g) => (
                 <tr key={g.id}>
                   <td className="whitespace-nowrap">{g.gameDate.slice(5)}</td>
-                  {COLS.map(([k]) => (
-                    <td key={k} className="text-right tabular-nums">
-                      {k === "minutes" ? Math.round(g.minutes) : g[k]}
+                  <td className="whitespace-nowrap text-slate-500">{g.opponent ?? "—"}</td>
+                  {g.dnpReason || g.minutes === 0 ? (
+                    <td colSpan={GAME_COLS.length} className="text-slate-500">
+                      Did not play{g.dnpReason ? `: ${g.dnpReason}` : ""}
                     </td>
-                  ))}
+                  ) : (
+                    <>
+                      <td className="text-right tabular-nums">{Math.round(g.minutes)}</td>
+                      <td className="text-right font-medium tabular-nums">{g.pts}</td>
+                      <td className="text-right tabular-nums">{g.reb}</td>
+                      <td className="text-right tabular-nums">{g.ast}</td>
+                      <td className="text-right tabular-nums">{g.stl}</td>
+                      <td className="text-right tabular-nums">{g.blk}</td>
+                      <td className="text-right tabular-nums">{g.tov}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {g.fgm}/{g.fga} <span className="text-slate-400">{pct(g.fgm, g.fga)}</span>
+                      </td>
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {g.ftm}/{g.fta} <span className="text-slate-400">{pct(g.ftm, g.fta)}</span>
+                      </td>
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {g.fg3m}/{g.fg3a} <span className="text-slate-400">{pct(g.fg3m, g.fg3a)}</span>
+                      </td>
+                      <td className="text-right tabular-nums">{g.tov > 0 ? (g.ast / g.tov).toFixed(2) : g.ast > 0 ? "INF" : "-"}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

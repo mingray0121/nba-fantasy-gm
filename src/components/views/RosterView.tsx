@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { fmtTipTime, useTimeZone } from "../timezone";
-import { ErrorBox, PageTitle, SlotPill, StatusBadge } from "../ui";
+import { ErrorBox, PageTitle, PlayerLink, SlotPill, StatusBadge } from "../ui";
 
 /** Yahoo's roster order. */
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
@@ -315,7 +315,7 @@ function TeamRoster({ leagueId, team }: { leagueId: number; team: Team }) {
                       {e ? (
                         <>
                           <td onPointerDown={(ev) => startDrag(e, ev)} className="cursor-grab touch-none select-none">
-                            <span className="font-medium">{e.name}</span> <StatusBadge status={e.injury ?? null} />
+                            <PlayerLink id={e.playerId} name={e.name} leagueId={leagueId} className="font-medium" /> <StatusBadge status={e.injury ?? null} />
                             <div className="text-xs text-slate-500">{[e.team, e.positions.join(", ")].filter(Boolean).join(" · ")}</div>
                           </td>
                           <td className="text-xs">

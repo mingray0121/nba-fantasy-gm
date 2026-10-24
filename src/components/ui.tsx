@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function PageTitle({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
@@ -91,4 +92,18 @@ export function timeAgo(d: Date | string | null) {
   if (mins < 60) return `${mins} min ago`;
   const h = Math.round(mins / 60);
   return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+}
+
+/** A player's name linking to his page (averages, previous games, schedule). */
+export function PlayerLink({ id, name, leagueId, className = "" }: { id: number; name: string; leagueId: number; className?: string }) {
+  return (
+    <Link
+      href={`/players/${id}?league=${leagueId}`}
+      className={`hover:underline ${className}`}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {name}
+    </Link>
+  );
 }
