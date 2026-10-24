@@ -20,7 +20,8 @@ import {
   type ReferenceStat,
 } from "../engine/matchup";
 import { suggestAddDrops, type AddDropPlayer } from "../engine/addDrop";
-import { computeWindows, blendWindows, DEFAULT_WEIGHTS } from "../engine/projections";
+import { computeWindows, blendWindows, DEFAULT_WEIGHTS, type GameLog } from "../engine/projections";
+import { espnCareer } from "../nba/client";
 import { pointsValue, round } from "../engine/values";
 import { ACTIVE_SLOTS, INJURED_SLOTS, type Slot } from "../rules/schema";
 import { addLines, COUNTING_STATS, EMPTY_LINE, scaleLine, type CountingStatKey, type StatLine } from "../stats";
@@ -519,6 +520,60 @@ export async function addDropView(leagueId: number) {
 /* Player detail                                                       */
 /* ------------------------------------------------------------------ */
 
+export interface AverageRow {
+  gp: number;
+  min: number;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  tov: number;
+  fg3m: number;
+  fgPct: number | null;
+  ftPct: number | null;
+  fg3Pct: number | null;
+}
+
+/** Per-game averages over games played (minutes > 0); percentages from summed makes and attempts. */
+function averageRow(logs: GameLog[]): AverageRow {
+  const g = logs.filter((l) => l.minutes > 0);
+  const sum = (k: keyof GameLog) => g.reduce((s, l) => s + (l[k] as number), 0);
+  const avg = (k: keyof GameLog) => (g.length ? round(sum(k) / g.length, 1) : 0);
+  const pct = (m: keyof GameLog, a: keyof GameLog) => (sum(a) > 0 ? sum(m) / sum(a) : null);
+  return {
+    gp: g.length,
+    min: avg("minutes"),
+    pts: avg("pts"),
+    reb: avg("reb"),
+    ast: avg("ast"),
+    stl: avg("stl"),
+    blk: avg("blk"),
+    tov: avg("tov"),
+    fg3m: avg("fg3m"),
+    fgPct: pct("fgm", "fga"),
+    ftPct: pct("ftm", "fta"),
+    fg3Pct: pct("fg3m", "fg3a"),
+  };
+}
+
+function averageRowFromLine(l: StatLine): AverageRow {
+  return {
+    gp: 0,
+    min: round(l.minutes, 1),
+    pts: round(l.pts, 1),
+    reb: round(l.reb, 1),
+    ast: round(l.ast, 1),
+    stl: round(l.stl, 1),
+    blk: round(l.blk, 1),
+    tov: round(l.tov, 1),
+    fg3m: round(l.fg3m, 1),
+    fgPct: l.fga > 0 ? l.fgm / l.fga : null,
+    ftPct: l.fta > 0 ? l.ftm / l.fta : null,
+    fg3Pct: l.fg3a > 0 ? l.fg3m / l.fg3a : null,
+  };
+}
+
 /** Adds the opponent (e.g. "@BOS") to each game log row. */
 async function withOpponents<T extends { gameId: number }>(logs: T[], teamId: number | null) {
   if (logs.length === 0) return [];
@@ -545,6 +600,7 @@ export async function playerView(playerId: number, leagueId?: number) {
       nbaTeamId: schema.players.nbaTeamId,
       yahooStatus: schema.players.yahooStatus,
       headshotUrl: schema.players.headshotUrl,
+      espnId: schema.players.nbaPlayerId,
     })
     .from(schema.players)
     .leftJoin(schema.nbaTeams, eq(schema.nbaTeams.id, schema.players.nbaTeamId))
@@ -558,8 +614,18 @@ export async function playerView(playerId: number, leagueId?: number) {
     .where(and(eq(schema.playerGameLogs.playerId, playerId), gte(schema.playerGameLogs.gameDate, addDays(today(), -240))))
     .orderBy(desc(schema.playerGameLogs.gameDate));
   const windows = computeWindows(logs, addDays(today(), -1));
-  const fmt = (l: StatLine) => Object.fromEntries(Object.entries(l).map(([k, v]) => [k, round(v, 1)]));
-  const last30 = computeWindows(logs.filter((l) => l.gameDate > addDays(today(), -30)), addDays(today(), -1)).season;
+  const played = logs.filter((l) => l.minutes > 0); // newest first
+  const career = player.espnId ? await espnCareer(player.espnId) : [];
+  const thisSeason = career[0]?.label;
+  const averages = [
+    { label: "This season", ...averageRow(logs) },
+    { label: "Last 5 games", ...averageRow(played.slice(0, 5)) },
+    { label: "Last 10 games", ...averageRow(played.slice(0, 10)) },
+    { label: "Last 15 games", ...averageRow(played.slice(0, 15)) },
+  ];
+  // ESPN lists the current season too; past seasons are the (up to) three before it.
+  const past = career.filter((c) => c.label !== "Career" && c.label !== thisSeason).slice(0, 3);
+  const careerRow = career.find((c) => c.label === "Career");
 
   const next7 = Array.from({ length: 7 }, (_, i) => addDays(today(), i));
   const byDay = await teamsPlayingByDay(next7);
@@ -578,14 +644,11 @@ export async function playerView(playerId: number, leagueId?: number) {
   return {
     player,
     injury: injury ?? null,
-    trends: {
-      season: { games: windows.season.games, ...fmt(windows.season.line) },
-      last30: { games: last30.games, ...fmt(last30.line) },
-      last14: { games: windows.last14.games, ...fmt(windows.last14.line) },
-      last7: { games: windows.last7.games, ...fmt(windows.last7.line) },
-      projection: fmt(blendWindows(windows, DEFAULT_WEIGHTS)),
-    },
-    gameLog: await withOpponents(logs.slice(0, 20), player.nbaTeamId),
+    averages,
+    projection: averageRowFromLine(blendWindows(windows, DEFAULT_WEIGHTS)),
+    pastSeasons: past,
+    career: careerRow ?? null,
+    gameLog: await withOpponents(logs, player.nbaTeamId),
     schedule,
     league,
   };

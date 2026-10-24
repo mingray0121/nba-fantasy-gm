@@ -22,7 +22,7 @@ Every recommendation comes from one idea: **a per-player value under that league
 
 ## How recommendations work
 
-- **Projection per game**: season, last 14 days and last 7 days windows (per-league weights, default 50 / 30 / 20). Per-minute rates and minutes are blended separately, so a minutes jump shows up quickly. Status sets a play probability (Out 0, Doubtful 0.25, GTD / Questionable 0.6, Probable 0.9).
+- **Projection per game**: season, last 10 games and last 5 games windows (per-league weights, default 50 / 30 / 20). Per-minute rates and minutes are blended separately, so a minutes jump shows up quickly. Status sets a play probability (Out 0, Doubtful 0.25, GTD / Questionable 0.6, Probable 0.9).
 - **League value per game**: points leagues multiply stats by the league's point weights. Category leagues sum z-scores against the league's rostered players; FG% / FT% / 3P% are scored by impact (attempts × difference from the pool percentage), turnovers count negative, punted categories are dropped.
 - **Start / bench**: for each day, players with a game fill PG, SG, G, SF, PF, F, C, UTIL to maximize starters first, then total value. Solved exactly (DP over slot bitmasks). IL players stay on IL.
 - **Matchup-aware (categories)**: close categories this week weigh 1.5×, likely-decided ones 0.5× when choosing starters. Toggle per league.

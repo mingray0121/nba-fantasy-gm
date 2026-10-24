@@ -171,3 +171,26 @@ describe("ESPN rosters", () => {
     expect(players[1]).toMatchObject({ positions: ["PG", "SG"], injuryStatus: "Day-To-Day" });
   });
 });
+
+describe("ESPN career", () => {
+  it("parses per-season and career averages, newest first", async () => {
+    const { parseEspnCareer } = await import("@/lib/nba/client");
+    const labels = ["GP", "GS", "MIN", "FG", "FG%", "3PT", "3P%", "FT", "FT%", "OR", "DR", "REB", "AST", "BLK", "STL", "PF", "TO", "PTS"];
+    const rows = parseEspnCareer({
+      categories: [
+        {
+          name: "averages",
+          labels,
+          statistics: [
+            { season: { displayName: "2024-25" }, stats: ["70", "70", "32.2", "8.1-18.0", "44.8", "4.4-11.2", "39.7", "4.0-4.3", "93.3", "0.6", "3.9", "4.4", "6.0", "0.4", "1.1", "1.4", "2.9", "24.5"] },
+            { season: { displayName: "2025-26" }, stats: ["43", "41", "30.9", "8.7-18.6", "46.8", "4.4-11.3", "39.3", "4.7-5.1", "92.3", "0.4", "3.2", "3.6", "4.7", "0.4", "1.1", "1.7", "2.8", "26.6"] },
+          ],
+          totals: ["1070", "1062", "34.0", "8.4-17.9", "47.1", "4.0-9.4", "42.2", "4.0-4.3", "91.2", "0.6", "4.0", "4.6", "6.3", "0.3", "1.5", "2.2", "3.1", "24.8"],
+        },
+      ],
+    });
+    expect(rows.map((r) => r.label)).toEqual(["2025-26", "2024-25", "Career"]);
+    expect(rows[0]).toMatchObject({ gp: 43, pts: 26.6, fg3m: 4.4, tov: 2.8 });
+    expect(rows[0].fgPct).toBeCloseTo(0.468);
+  });
+});

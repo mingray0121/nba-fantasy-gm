@@ -140,7 +140,7 @@ describe.skipIf(!url)("integration", () => {
     expect(ad.freeAgents.length).toBe(12);
 
     const pv = await m.views.playerView(1, ids.cats);
-    expect(pv?.trends.season.games).toBeGreaterThan(0);
+    expect(pv?.averages[0].gp).toBeGreaterThan(0);
   });
 
   it("keeps rule versions isolated per league", async () => {

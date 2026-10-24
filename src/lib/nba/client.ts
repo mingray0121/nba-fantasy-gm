@@ -388,3 +388,61 @@ export function fallbackSource(): BallDontLieSource | null {
   const key = optionalEnv("BALLDONTLIE_API_KEY");
   return key ? new BallDontLieSource(key) : null;
 }
+
+export interface SeasonAverages {
+  label: string; // "2025-26" or "Career"
+  gp: number;
+  min: number;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  tov: number;
+  fg3m: number;
+  fgPct: number | null; // 0..1
+  ftPct: number | null;
+  fg3Pct: number | null;
+}
+
+/** ESPN per-season and career averages (`athletes/{id}/stats`), newest season first. */
+export function parseEspnCareer(body: any): SeasonAverages[] {
+  const cat = (body.categories ?? []).find((c: any) => c.name === "averages");
+  if (!cat) return [];
+  const labels: string[] = cat.labels ?? [];
+  const row = (label: string, stats: string[]): SeasonAverages => {
+    const v = (k: string) => stats[labels.indexOf(k)];
+    const n = (k: string) => Number(v(k)) || 0;
+    const pct = (k: string) => (v(k) == null || v(k) === "" ? null : Number(v(k)) / 100);
+    return {
+      label,
+      gp: n("GP"),
+      min: n("MIN"),
+      pts: n("PTS"),
+      reb: n("REB"),
+      ast: n("AST"),
+      stl: n("STL"),
+      blk: n("BLK"),
+      tov: n("TO"),
+      fg3m: Number(String(v("3PT") ?? "0").split("-")[0]) || 0,
+      fgPct: pct("FG%"),
+      ftPct: pct("FT%"),
+      fg3Pct: pct("3P%"),
+    };
+  };
+  const seasons = (cat.statistics ?? []).map((s: any) => row(s.season?.displayName ?? "", s.stats ?? [])).reverse();
+  return cat.totals ? [...seasons, row("Career", cat.totals)] : seasons;
+}
+
+/** Past seasons and career for one player; cached for six hours. Empty when ESPN has nothing. */
+export async function espnCareer(espnPlayerId: number): Promise<SeasonAverages[]> {
+  try {
+    const res = await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${espnPlayerId}/stats`, {
+      headers: { "User-Agent": "Mozilla/5.0 nba-fantasy-assistant", Accept: "application/json" },
+      next: { revalidate: 21600 },
+    });
+    return res.ok ? parseEspnCareer(await res.json()) : [];
+  } catch {
+    return [];
+  }
+}

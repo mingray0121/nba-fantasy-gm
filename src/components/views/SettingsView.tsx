@@ -46,11 +46,11 @@ export function SettingsView({ leagueId }: { leagueId: number }) {
       >
         <fieldset>
           <legend className="font-medium">Projection window weights (%)</legend>
-          <p className="mb-2 text-xs text-slate-500">How much the season, last 14 days and last 7 days count. They are rescaled to add up to 100.</p>
+          <p className="mb-2 text-xs text-slate-500">How much the season, last 10 games and last 5 games count. They are rescaled to add up to 100.</p>
           <div className="grid grid-cols-3 gap-2">
             {(["season", "last14", "last7"] as const).map((k) => (
               <label key={k} className="grid gap-1">
-                <span className="text-xs text-slate-500">{k === "season" ? "Season" : k === "last14" ? "Last 14 days" : "Last 7 days"}</span>
+                <span className="text-xs text-slate-500">{k === "season" ? "Season" : k === "last14" ? "Last 10 games" : "Last 5 games"}</span>
                 <input
                   type="number"
                   min={0}

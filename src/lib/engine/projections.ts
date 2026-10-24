@@ -1,5 +1,4 @@
 import { EMPTY_LINE, type StatField, type StatLine } from "../stats";
-import { addDays } from "../dates";
 
 export interface GameLog extends Omit<StatLine, "dd" | "td"> {
   gameDate: string;
@@ -37,14 +36,20 @@ export function averageLogs(logs: GameLog[]): WindowProjection {
   return { games: played.length, line };
 }
 
-/** Season, last-14-day and last-7-day per-game windows as of `asOf` (exclusive of games after it). */
+/** Recent windows count games played, not calendar days (rest days and back-to-backs don't skew them). */
+export const RECENT_GAMES = { last14: 10, last7: 5 } as const;
+
+/**
+ * Season, last-10-game and last-5-game per-game windows as of `asOf` (games after it excluded).
+ * The keys keep their original names (last14 / last7) because they are stored projection horizons.
+ */
 export function computeWindows(logs: GameLog[], asOf: string): Windows {
   const upTo = logs.filter((l) => l.gameDate <= asOf);
-  const since = (days: number) => upTo.filter((l) => l.gameDate > addDays(asOf, -days));
+  const played = upTo.filter((l) => l.minutes > 0).sort((a, b) => (a.gameDate < b.gameDate ? 1 : -1));
   return {
     season: averageLogs(upTo),
-    last14: averageLogs(since(14)),
-    last7: averageLogs(since(7)),
+    last14: averageLogs(played.slice(0, RECENT_GAMES.last14)),
+    last7: averageLogs(played.slice(0, RECENT_GAMES.last7)),
   };
 }
 
