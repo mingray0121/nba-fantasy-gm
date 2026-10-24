@@ -26,7 +26,7 @@ interface Player {
   positions: string[];
   team: string | null;
   injury: string | null;
-  tomorrow: string | null;
+  game: string | null;
   mine: boolean;
   owner: string | null;
   value: number | null;
@@ -38,6 +38,8 @@ interface Player {
 
 interface Data {
   date: string;
+  today: string;
+  strip: string[];
   games: { home: string; away: string; tipTime: string | null }[];
   categories: string[];
   rosterSlots: Record<string, number>;
@@ -49,10 +51,27 @@ const fits = (slot: string, pos: string[]) =>
   slot === "UTIL" ? pos.length > 0 : slot === "G" ? pos.some((p) => p === "PG" || p === "SG") : slot === "F" ? pos.some((p) => p === "SF" || p === "PF") : pos.includes(slot);
 const pct = (v: number | null) => (v == null ? "-" : v.toFixed(3).replace(/^0/, ""));
 
-/** Tomorrow's games: open a team, pick a slot to see who could fill it, and compare players side by side. */
-export function TomorrowPanel({ leagueId }: { leagueId: number }) {
+const dayName = (d: string, today: string) => {
+  const diff = Math.round((Date.parse(d) - Date.parse(today)) / 86400000);
+  if (diff === 0) return "Tonight";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Last night";
+  return new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+};
+const monthDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "numeric", day: "numeric", timeZone: "UTC" });
+
+/**
+ * A night of games, picked from a date strip (US Eastern game nights, like the NBA app's
+ * schedule): open a team, pick a slot to see who could fill it, and compare players.
+ */
+export function UpcomingPanel({ leagueId }: { leagueId: number }) {
   const [tz] = useTimeZone();
-  const q = useQuery({ queryKey: ["league", leagueId, "tomorrow"], queryFn: () => api<Data>(`/api/leagues/${leagueId}/tomorrow`) });
+  const [picked, setPicked] = useState<string | null>(null); // null: let the server pick the next open slate
+  const q = useQuery({
+    queryKey: ["league", leagueId, "upcoming", picked],
+    queryFn: () => api<Data>(`/api/leagues/${leagueId}/upcoming${picked ? `?date=${picked}` : ""}`),
+    placeholderData: (prev) => prev,
+  });
   const [team, setTeam] = useState<string | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
   const [compare, setCompare] = useState<number[]>([]);
@@ -60,10 +79,28 @@ export function TomorrowPanel({ leagueId }: { leagueId: number }) {
   if (q.error) return <ErrorBox error={q.error} />;
   const d = q.data!;
   const toggle = (id: number) => setCompare((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id].slice(-4)));
-  const candidates = slot ? d.players.filter((p) => fits(slot, p.positions) && (p.tomorrow || p.mine)) : [];
+  const candidates = slot ? d.players.filter((p) => fits(slot, p.positions) && (p.game || p.mine)) : [];
+  const now = Date.now();
 
   return (
     <>
+      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
+        {d.strip.map((day) => (
+          <button
+            key={day}
+            onClick={() => {
+              setPicked(day);
+              setTeam(null);
+            }}
+            className={`min-w-[4.5rem] shrink-0 rounded-lg px-3 py-1.5 text-center text-xs ${
+              day === d.date ? "bg-court-600 text-white" : "bg-white ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-700"
+            }`}
+          >
+            <div className="font-semibold">{dayName(day, d.today)}</div>
+            <div className={day === d.date ? "text-white/80" : "text-slate-500"}>{monthDay(day)}</div>
+          </button>
+        ))}
+      </div>
       {d.games.length === 0 ? (
         <Empty>No NBA games on {d.date}.</Empty>
       ) : (
@@ -80,7 +117,9 @@ export function TomorrowPanel({ leagueId }: { leagueId: number }) {
                   {t}
                 </button>
               ))}
-              <span className="text-xs text-slate-500">{fmtTipTime(g.tipTime, tz)}</span>
+              <span className="text-xs text-slate-500">
+                {g.tipTime && Date.parse(g.tipTime) <= now ? "Started" : fmtTipTime(g.tipTime, tz)}
+              </span>
             </div>
           ))}
         </div>
@@ -102,7 +141,7 @@ export function TomorrowPanel({ leagueId }: { leagueId: number }) {
               <tr>
                 <th>Compare</th>
                 <th>Player</th>
-                <th>Tomorrow</th>
+                <th>Game</th>
                 <th className="text-right">Value</th>
                 <th className="text-right">PTS</th>
                 <th className="text-right">REB</th>
@@ -121,7 +160,7 @@ export function TomorrowPanel({ leagueId }: { leagueId: number }) {
                     <PlayerLink id={p.id} name={p.name} leagueId={leagueId} className="font-medium" /> <StatusBadge status={p.injury} />
                     <div className="text-xs text-slate-500">{[p.team, p.positions.join(", ")].filter(Boolean).join(" · ")}</div>
                   </td>
-                  <td className="text-xs">{p.tomorrow ?? <span className="text-slate-400">No game</span>}</td>
+                  <td className="text-xs">{p.game ?? <span className="text-slate-400">No game</span>}</td>
                   <td className="text-right font-medium tabular-nums">{p.value == null ? "—" : p.value.toFixed(2)}</td>
                   <td className="text-right tabular-nums">{p.season.pts.toFixed(1)}</td>
                   <td className="text-right tabular-nums">{p.season.reb.toFixed(1)}</td>

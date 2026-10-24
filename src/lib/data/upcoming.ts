@@ -1,4 +1,4 @@
-/** Suggestions: tomorrow's NBA games and the players you could start from them, with comparison stats. */
+/** Suggestions: one night of NBA games (US Eastern date) and the players you could start from them, with comparison stats. */
 import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { currentWeek, loadLeagueContext, teamsPlayingByDay } from "./model";
@@ -39,9 +39,26 @@ function average(logs: Log[]): Avg {
   };
 }
 
-export async function tomorrowView(leagueId: number) {
+/** Days shown in the date strip: yesterday through six days ahead (US Eastern). */
+export const STRIP_DAYS = [-1, 0, 1, 2, 3, 4, 5, 6];
+
+/**
+ * Tonight if any of today's games (US Eastern) has not tipped off yet; otherwise
+ * the next day, so the default is always the next slate you can still set.
+ */
+async function defaultDate(): Promise<string> {
+  const t = today();
+  const games = (await teamsPlayingByDay([t])).get(t)!;
+  const now = Date.now();
+  const upcoming = [...games.values()].some((g) => !g.tipTime || g.tipTime.getTime() > now);
+  return upcoming ? t : addDays(t, 1);
+}
+
+export async function upcomingView(leagueId: number, requested?: string | null) {
   const db = getDb();
-  const date = addDays(today(), 1); // US Eastern
+  const t = today();
+  const strip = STRIP_DAYS.map((n) => addDays(t, n));
+  const date = requested && strip.includes(requested) ? requested : await defaultDate();
   const games = (await teamsPlayingByDay([date])).get(date)!;
   const teams = await db.select().from(schema.nbaTeams);
   const abbr = new Map(teams.map((t) => [t.id, t.abbreviation]));
@@ -95,7 +112,7 @@ export async function tomorrowView(leagueId: number) {
     return {
       ...p,
       team: p.nbaTeamId ? (abbr.get(p.nbaTeamId) ?? null) : null,
-      tomorrow: g ? `${g.home ? "vs" : "@"} ${g.opponent}` : null,
+      game: g ? `${g.home ? "vs" : "@"} ${g.opponent}` : null,
       mine: mine.has(p.id),
       owner: ownerOf.get(p.id) ?? null,
       value: m?.valuePerGame ?? null,
@@ -108,6 +125,8 @@ export async function tomorrowView(leagueId: number) {
   rows.sort((a, b) => (b.value ?? -99) - (a.value ?? -99));
   return {
     date,
+    today: t,
+    strip,
     games: [...matchups.values()].sort((a, b) => (a.tipTime ?? "").localeCompare(b.tipTime ?? "")),
     categories: ctx.rules.categories,
     rosterSlots: ctx.rules.roster_slots,
