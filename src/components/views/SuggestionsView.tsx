@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
-import { Badge, Empty, ErrorBox, Loading, PageTitle, PlayerLink, SlotPill } from "../ui";
+import { ActionBadge, actionTarget, Badge, Empty, ErrorBox, Loading, PageTitle, PlayerLink, SlotPill } from "../ui";
 import { UpcomingPanel } from "./UpcomingPanel";
 import type { LineupRow } from "@/lib/data/views";
 import type { AddDropSuggestion } from "@/lib/engine/addDrop";
@@ -57,10 +57,10 @@ export function SuggestionsView({ leagueId }: { leagueId: number }) {
             <ul className="grid gap-2 sm:grid-cols-2">
               {d.lineup.changes.map((r) => (
                 <li key={r.playerId} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
-                  <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "Start" : "Bench"}</Badge>
+                  <ActionBadge action={r.action} />
                   <PlayerLink id={r.playerId} name={r.name} leagueId={leagueId} className="font-medium" />
                   <span className="ml-auto flex items-center gap-1 text-xs text-slate-500">
-                    <SlotPill slot={r.currentSlot} muted />→<SlotPill slot={r.action === "start" ? r.recommendedSlot : "BN"} />
+                    <SlotPill slot={r.currentSlot} muted />→<SlotPill slot={actionTarget(r)} />
                   </span>
                 </li>
               ))}

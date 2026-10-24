@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { optimizeLineup, slotAccepts } from "@/lib/engine/lineup";
+import { optimizeLineup, planInjuredList, slotAccepts } from "@/lib/engine/lineup";
 import { buildCategoryScorer, pointsValue } from "@/lib/engine/values";
 import { averageLogs, blendWindows, computeWindows, playProbability, type GameLog } from "@/lib/engine/projections";
 import { projectCategories, matchupWeights } from "@/lib/engine/matchup";
@@ -210,5 +210,24 @@ describe("trade finder", () => {
       expect(t.myGain).toBeGreaterThan(0);
       expect(t.partnerGain).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("injured list plan", () => {
+  it("moves ruled-out players into open IL slots, IL first, and leaves the rest", () => {
+    const plan = planInjuredList(
+      [
+        { playerId: 1, slot: "BN", out: true },
+        { playerId: 2, slot: "PG", out: true },
+        { playerId: 3, slot: "IL", out: true }, // already on IL
+        { playerId: 4, slot: "C", out: true }, // no slot left
+        { playerId: 5, slot: "BN", out: false },
+      ],
+      { IL: 2, "IL+": 1 },
+    );
+    expect([...plan]).toEqual([
+      [1, "IL"],
+      [2, "IL+"],
+    ]);
   });
 });

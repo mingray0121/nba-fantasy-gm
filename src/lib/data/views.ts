@@ -10,7 +10,7 @@ import {
   type LeagueContext,
   type ModelPlayer,
 } from "./model";
-import { optimizeLineup, type LineupPlayer } from "../engine/lineup";
+import { optimizeLineup, planInjuredList, type LineupPlayer } from "../engine/lineup";
 import {
   matchupWeights,
   projectCategories,
@@ -42,8 +42,14 @@ export interface LineupRow {
   recommendedSlot: string;
   value: number;
   valuePerGame: number;
-  action: "start" | "bench" | "keep";
+  /** "il": ruled out, move to an open IL slot; "activate": healthy but still on IL. */
+  action: "start" | "bench" | "keep" | "il" | "activate";
   reason: string;
+}
+
+/** Ruled out (Yahoo O/INJ/OFS, ESPN "Out"): eligible for an IL slot. */
+function isOut(p: ModelPlayer | undefined): boolean {
+  return [p?.injuryStatus, p?.yahooStatus].some((s) => !!s && ["OUT", "O", "INJ", "OFS", "IL", "IL+"].includes(s.toUpperCase()));
 }
 
 function rosterFor(ctx: LeagueContext, teamId: number | undefined) {
@@ -88,15 +94,25 @@ export async function lineupView(leagueId: number, date = today()) {
   const ranked = lp.filter((p) => p.hasGame).sort((a, b) => b.value - a.value);
   const lowestStarter = ranked.filter((p) => result.assignments.get(p.playerId) !== "BN").at(-1);
 
+  const toIl = planInjuredList(
+    rosterFor(ctx, ctx.myTeam.id).map((r) => ({ playerId: r.playerId, slot: r.slot, out: isOut(ctx.players.get(r.playerId)) })),
+    ctx.rules.roster_slots,
+  );
+
   const rows: LineupRow[] = rosterFor(ctx, ctx.myTeam.id).map((r) => {
     const p = ctx.players.get(r.playerId)!;
     const g = p?.nbaTeamId ? games.get(p.nbaTeamId) : undefined;
-    const rec = result.assignments.get(r.playerId) ?? "BN";
+    const onIl = INJURED_SLOTS.includes(r.slot as Slot);
+    const ilSlot = toIl.get(r.playerId);
+    const rec = ilSlot ?? (onIl ? r.slot : (result.assignments.get(r.playerId) ?? "BN"));
     const lpp = lp.find((x) => x.playerId === r.playerId)!;
-    const isStart = rec !== "BN" && rec !== "IL";
-    const wasStart = r.slot !== "BN" && !INJURED_SLOTS.includes(r.slot as Slot);
+    const isStart = rec !== "BN" && !INJURED_SLOTS.includes(rec as Slot);
+    const wasStart = r.slot !== "BN" && !onIl;
+    const activate = onIl && !isOut(p);
     let reason: string;
-    if (rec === "IL") reason = "On your injured list";
+    if (ilSlot) reason = `${p.injuryStatus ?? p.yahooStatus}: move to ${ilSlot} to free a roster spot`;
+    else if (activate) reason = "No longer out: activate from IL (needs an open roster spot)";
+    else if (onIl) reason = "On your injured list";
     else if (!g) reason = "No game";
     else if (p.playProbability === 0) reason = `Ruled out (${p.injuryStatus ?? p.yahooStatus})`;
     else if (isStart)
@@ -117,7 +133,7 @@ export async function lineupView(leagueId: number, date = today()) {
       recommendedSlot: rec,
       value: round(lpp.value, 2),
       valuePerGame: p?.valuePerGame ?? 0,
-      action: rec === "IL" ? "keep" : isStart === wasStart ? "keep" : isStart ? "start" : "bench",
+      action: ilSlot ? "il" : activate ? "activate" : onIl ? "keep" : isStart === wasStart ? "keep" : isStart ? "start" : "bench",
       reason,
     };
   });
@@ -536,7 +552,7 @@ export interface AverageRow {
 }
 
 /** Per-game averages over games played (minutes > 0); percentages from summed makes and attempts. */
-function averageRow(logs: GameLog[]): AverageRow {
+export function averageRow(logs: GameLog[]): AverageRow {
   const g = logs.filter((l) => l.minutes > 0);
   const sum = (k: keyof GameLog) => g.reduce((s, l) => s + (l[k] as number), 0);
   const avg = (k: keyof GameLog) => (g.length ? round(sum(k) / g.length, 1) : 0);

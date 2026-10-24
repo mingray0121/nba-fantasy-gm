@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { fmtTipTime, useTimeZone } from "../timezone";
-import { Badge, Empty, ErrorBox, Loading, PageTitle, SlotPill, StatusBadge } from "../ui";
+import { ActionBadge, actionTarget, Empty, ErrorBox, Loading, PageTitle, SlotPill, StatusBadge } from "../ui";
 import type { LineupRow } from "@/lib/data/views";
 
 interface Lineup {
@@ -80,10 +80,10 @@ export function TodayView({ leagueId }: { leagueId: number }) {
                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                   {changes.map((r) => (
                     <li key={r.playerId} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
-                      <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "Start" : "Bench"}</Badge>
+                      <ActionBadge action={r.action} />
                       <span className="font-medium">{r.name}</span>
                       <span className="ml-auto flex items-center gap-1 text-xs text-slate-500">
-                        <SlotPill slot={r.currentSlot} muted />→<SlotPill slot={r.action === "start" ? r.recommendedSlot : "BN"} />
+                        <SlotPill slot={r.currentSlot} muted />→<SlotPill slot={actionTarget(r)} />
                       </span>
                     </li>
                   ))}
@@ -113,7 +113,7 @@ export function TodayView({ leagueId }: { leagueId: number }) {
                           <SlotPill slot={r.recommendedSlot} />
                           {r.action !== "keep" && (
                             <div className="mt-0.5">
-                              <Badge tone={r.action === "start" ? "green" : "amber"}>{r.action === "start" ? "start" : "bench"}</Badge>
+                              <ActionBadge action={r.action} />
                             </div>
                           )}
                         </td>

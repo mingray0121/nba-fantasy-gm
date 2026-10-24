@@ -10,7 +10,7 @@ import { chunk, type JobResult } from "./run";
 
 const COUNTED_GAME_TYPES = ["regular", "playin", "playoffs"];
 
-/** Daily: season schedule and teams from the NBA CDN. */
+/** Daily: season schedule and teams from ESPN. */
 export async function syncSchedule(): Promise<JobResult> {
   const db = getDb();
   const games = await primarySource().schedule();

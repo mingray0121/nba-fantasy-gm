@@ -21,8 +21,6 @@ export const JOBS: Record<string, SharedJob | LeagueJob> = {
   projections: { scope: "shared", run: () => computeProjections() },
 };
 
-export type JobName = keyof typeof JOBS;
-
 export interface JobRunSummary {
   job: string;
   leagueId: number | null;

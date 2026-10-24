@@ -9,7 +9,7 @@ import { ErrorBox, PageTitle, PlayerLink, SlotPill, StatusBadge } from "../ui";
 /** Yahoo's roster order. */
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
 /** Same eligibility as the lineup optimizer: G takes PG/SG, F takes SF/PF, UTIL anyone with a position. */
-function fits(slot: string, positions: string[]): boolean {
+export function fits(slot: string, positions: string[]): boolean {
   if (slot === "BN" || slot === "IL" || slot === "IL+") return true;
   if (slot === "UTIL") return positions.length > 0;
   if (slot === "G") return positions.some((p) => p === "PG" || p === "SG");

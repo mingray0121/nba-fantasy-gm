@@ -52,90 +52,6 @@ export interface NbaDataSource {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const GAME_TYPES: Record<string, NbaScheduledGame["gameType"]> = {
-  "001": "preseason",
-  "002": "regular",
-  "003": "allstar",
-  "004": "playoffs",
-  "005": "playin",
-  "006": "cup_final",
-};
-
-/** "PT34M12.00S" -> 34.2 */
-export function parseIsoMinutes(v: string | null | undefined): number {
-  if (!v) return 0;
-  const m = /PT(?:(\d+)M)?(?:([\d.]+)S)?/.exec(v);
-  if (!m) return Number(v) || 0;
-  return Number(m[1] ?? 0) + Number(m[2] ?? 0) / 60;
-}
-
-function teamInfo(t: any): NbaTeamInfo {
-  return {
-    nbaTeamId: Number(t.teamId),
-    abbreviation: t.teamTricode,
-    name: [t.teamCity, t.teamName].filter(Boolean).join(" "),
-  };
-}
-
-export function parseCdnSchedule(body: any): NbaScheduledGame[] {
-  const out: NbaScheduledGame[] = [];
-  for (const day of body.leagueSchedule?.gameDates ?? []) {
-    for (const g of day.games ?? []) {
-      if (!g.homeTeam?.teamId || !g.awayTeam?.teamId) continue; // TBD playoff / Cup slots
-      const tip = g.gameDateTimeUTC ? new Date(g.gameDateTimeUTC) : null;
-      const gameDate = g.gameDateEst
-        ? String(g.gameDateEst).slice(0, 10)
-        : tip
-          ? toLocalDate(tip, "America/New_York")
-          : "";
-      out.push({
-        nbaGameId: String(g.gameId),
-        gameDate,
-        tipTime: tip,
-        home: teamInfo(g.homeTeam),
-        away: teamInfo(g.awayTeam),
-        status: g.gameStatus === 3 ? "final" : g.gameStatus === 2 ? "live" : "scheduled",
-        gameType: GAME_TYPES[String(g.gameId).slice(0, 3)] ?? "regular",
-      });
-    }
-  }
-  return out;
-}
-
-export function parseCdnBoxScore(body: any): NbaBoxLine[] {
-  const game = body.game;
-  const out: NbaBoxLine[] = [];
-  for (const side of [game.homeTeam, game.awayTeam]) {
-    for (const p of side.players ?? []) {
-      const s = p.statistics ?? {};
-      out.push({
-        nbaPlayerId: Number(p.personId),
-        name: p.name ?? `${p.firstName} ${p.familyName}`,
-        teamAbbr: side.teamTricode,
-        minutes: parseIsoMinutes(s.minutesCalculated ?? s.minutes),
-        pts: s.points ?? 0,
-        reb: s.reboundsTotal ?? 0,
-        oreb: s.reboundsOffensive ?? 0,
-        dreb: s.reboundsDefensive ?? 0,
-        ast: s.assists ?? 0,
-        stl: s.steals ?? 0,
-        blk: s.blocks ?? 0,
-        tov: s.turnovers ?? 0,
-        fgm: s.fieldGoalsMade ?? 0,
-        fga: s.fieldGoalsAttempted ?? 0,
-        ftm: s.freeThrowsMade ?? 0,
-        fta: s.freeThrowsAttempted ?? 0,
-        fg3m: s.threePointersMade ?? 0,
-        fg3a: s.threePointersAttempted ?? 0,
-        pf: s.foulsPersonal ?? 0,
-        plusMinus: Math.round(s.plusMinusPoints ?? 0),
-        dnpReason: p.played === "0" ? (p.notPlayingReason ?? p.notPlayingDescription ?? "DNP") : null,
-      });
-    }
-  }
-  return out;
-}
-
 async function getJson(url: string, headers: Record<string, string> = {}) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 nba-fantasy-assistant", Accept: "application/json", ...headers },
@@ -143,20 +59,6 @@ async function getJson(url: string, headers: Record<string, string> = {}) {
   });
   if (!res.ok) throw new Error(`${res.status} from ${url}`);
   return res.json();
-}
-
-export class NbaCdnSource implements NbaDataSource {
-  async schedule() {
-    return parseCdnSchedule(
-      await getJson("https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json"),
-    );
-  }
-
-  async boxScore(game: { nbaGameId: string }) {
-    return parseCdnBoxScore(
-      await getJson(`https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${game.nbaGameId}.json`),
-    );
-  }
 }
 
 /** Fallback box scores from balldontlie (by date, matched to the game by team). */

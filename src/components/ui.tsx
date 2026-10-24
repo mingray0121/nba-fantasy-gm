@@ -107,3 +107,21 @@ export function PlayerLink({ id, name, leagueId, className = "" }: { id: number;
     </Link>
   );
 }
+
+const ACTIONS = {
+  start: { tone: "green", label: "Start" },
+  bench: { tone: "amber", label: "Bench" },
+  il: { tone: "red", label: "To IL" },
+  activate: { tone: "blue", label: "Activate" },
+  keep: { tone: "gray", label: "Keep" },
+} as const;
+
+/** A lineup change: start, bench, move to IL, or activate from IL. */
+export function ActionBadge({ action }: { action: keyof typeof ACTIONS }) {
+  return <Badge tone={ACTIONS[action].tone}>{ACTIONS[action].label}</Badge>;
+}
+
+/** The slot a lineup change moves the player to. */
+export function actionTarget(r: { action: string; recommendedSlot: string }): string {
+  return r.action === "start" || r.action === "il" ? r.recommendedSlot : "BN";
+}

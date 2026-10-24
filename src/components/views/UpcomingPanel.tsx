@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
+import { fits } from "./RosterView";
 import { fmtTipTime, useTimeZone } from "../timezone";
 import { Badge, Empty, ErrorBox, Loading, PlayerLink, StatusBadge } from "../ui";
 
@@ -47,8 +48,6 @@ interface Data {
 }
 
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL"];
-const fits = (slot: string, pos: string[]) =>
-  slot === "UTIL" ? pos.length > 0 : slot === "G" ? pos.some((p) => p === "PG" || p === "SG") : slot === "F" ? pos.some((p) => p === "SF" || p === "PF") : pos.includes(slot);
 const pct = (v: number | null) => (v == null ? "-" : v.toFixed(3).replace(/^0/, ""));
 
 const dayName = (d: string, today: string) => {

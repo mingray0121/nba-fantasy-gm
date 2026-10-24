@@ -3,7 +3,7 @@
  * projections) and values every relevant player under that league's scoring.
  * Everything here is scoped to a single league.
  */
-import { and, desc, eq, gte, inArray, lte, max, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, max } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getActiveRules } from "./rules";
 import { DEFAULT_RULES, type LeagueRules } from "../rules/schema";
@@ -283,14 +283,6 @@ export async function latestMatchup(leagueId: number, teamId: number) {
     .orderBy(desc(schema.matchups.week))
     .limit(1);
   return m ?? null;
-}
-
-export async function lastSync(leagueId: number) {
-  const [row] = await getDb()
-    .select({ at: max(schema.syncRuns.finishedAt) })
-    .from(schema.syncRuns)
-    .where(and(or(eq(schema.syncRuns.leagueId, leagueId)), eq(schema.syncRuns.status, "ok")));
-  return row?.at ?? null;
 }
 
 export { addDays };

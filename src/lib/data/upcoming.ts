@@ -2,42 +2,8 @@
 import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { currentWeek, loadLeagueContext, teamsPlayingByDay } from "./model";
+import { averageRow } from "./views";
 import { addDays, today } from "../dates";
-
-interface Avg {
-  gp: number;
-  min: number;
-  pts: number;
-  reb: number;
-  ast: number;
-  stl: number;
-  blk: number;
-  tov: number;
-  fg3m: number;
-  fgPct: number | null;
-  ftPct: number | null;
-}
-
-type Log = typeof schema.playerGameLogs.$inferSelect;
-
-function average(logs: Log[]): Avg {
-  const g = logs.filter((l) => l.minutes > 0);
-  const sum = (f: (l: Log) => number) => g.reduce((s, l) => s + f(l), 0);
-  const avg = (f: (l: Log) => number) => (g.length ? Math.round((sum(f) / g.length) * 10) / 10 : 0);
-  return {
-    gp: g.length,
-    min: avg((l) => l.minutes),
-    pts: avg((l) => l.pts),
-    reb: avg((l) => l.reb),
-    ast: avg((l) => l.ast),
-    stl: avg((l) => l.stl),
-    blk: avg((l) => l.blk),
-    tov: avg((l) => l.tov),
-    fg3m: avg((l) => l.fg3m),
-    fgPct: sum((l) => l.fga) ? sum((l) => l.fgm) / sum((l) => l.fga) : null,
-    ftPct: sum((l) => l.fta) ? sum((l) => l.ftm) / sum((l) => l.fta) : null,
-  };
-}
 
 /** Days shown in the date strip: yesterday through six days ahead (US Eastern). */
 export const STRIP_DAYS = [-1, 0, 1, 2, 3, 4, 5, 6];
@@ -100,7 +66,7 @@ export async function upcomingView(leagueId: number, requested?: string | null) 
         .where(and(inArray(schema.playerGameLogs.playerId, ids), gte(schema.playerGameLogs.gameDate, addDays(today(), -240))))
         .orderBy(desc(schema.playerGameLogs.gameDate))
     : [];
-  const logsOf = new Map<number, Log[]>();
+  const logsOf = new Map<number, (typeof logs)[number][]>();
   for (const l of logs) logsOf.set(l.playerId, [...(logsOf.get(l.playerId) ?? []), l]);
 
   const week = currentWeek(ctx);
@@ -118,8 +84,8 @@ export async function upcomingView(leagueId: number, requested?: string | null) 
       value: m?.valuePerGame ?? null,
       categoryZ: m?.categoryZ ?? {},
       gamesLeftThisWeek: p.nbaTeamId ? week.remainingDays.filter((d) => byDay.get(d)!.has(p.nbaTeamId!)).length : 0,
-      season: average(own),
-      last5: average(own.filter((l) => l.minutes > 0).slice(0, 5)),
+      season: averageRow(own),
+      last5: averageRow(own.filter((l) => l.minutes > 0).slice(0, 5)),
     };
   });
   rows.sort((a, b) => (b.value ?? -99) - (a.value ?? -99));

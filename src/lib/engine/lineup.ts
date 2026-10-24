@@ -1,4 +1,4 @@
-import { ACTIVE_SLOTS, type Slot } from "../rules/schema";
+import { ACTIVE_SLOTS, INJURED_SLOTS, type Slot } from "../rules/schema";
 
 /** Which player positions can fill each starting slot. */
 export function slotAccepts(slot: Slot, positions: string[]): boolean {
@@ -106,4 +106,26 @@ function greedy(
     totalValue += p.value;
   }
   return { assignments, starters: used.size, totalValue };
+}
+
+/**
+ * Ruled-out players not yet on an injured list go to open IL slots by default
+ * (IL first, then IL+), which frees their roster spot. Returns player -> slot.
+ */
+export function planInjuredList(
+  roster: { playerId: number; slot: string; out: boolean }[],
+  slotCounts: Partial<Record<Slot, number>>,
+): Map<number, Slot> {
+  const open: Slot[] = [];
+  for (const slot of INJURED_SLOTS) {
+    const used = roster.filter((r) => r.slot === slot).length;
+    for (let i = used; i < (slotCounts[slot] ?? 0); i++) open.push(slot);
+  }
+  const plan = new Map<number, Slot>();
+  for (const r of roster) {
+    if (!r.out || INJURED_SLOTS.includes(r.slot as Slot)) continue;
+    const slot = open.shift();
+    if (slot) plan.set(r.playerId, slot);
+  }
+  return plan;
 }

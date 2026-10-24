@@ -37,11 +37,6 @@ export type PercentStatKey = keyof typeof PERCENT_STATS;
 export type StatKey = CountingStatKey | PercentStatKey;
 export type StatField = (typeof COUNTING_STATS)[CountingStatKey];
 
-export const STAT_KEYS = [
-  ...Object.keys(COUNTING_STATS),
-  ...Object.keys(PERCENT_STATS),
-] as StatKey[];
-
 /** Stats where lower is better. */
 export const NEGATIVE_STATS = new Set<StatKey>(["TO", "PF"]);
 
