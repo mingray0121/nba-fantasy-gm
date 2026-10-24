@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { Badge, Empty, ErrorBox, Loading, PageTitle, PlayerLink, SlotPill } from "../ui";
+import { TomorrowPanel } from "./TomorrowPanel";
 import type { LineupRow } from "@/lib/data/views";
 import type { AddDropSuggestion } from "@/lib/engine/addDrop";
 import type { TradeIdea } from "@/lib/engine/trades";
@@ -80,6 +81,10 @@ export function SuggestionsView({ leagueId }: { leagueId: number }) {
             </div>
           ))}
         </div>
+      </Section>
+
+      <Section n="1B" title="Tomorrow's games" subtitle="US Eastern; tap a team, pick a slot, tick players to compare">
+        <TomorrowPanel leagueId={leagueId} />
       </Section>
 
       <Section

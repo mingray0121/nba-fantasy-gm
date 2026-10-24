@@ -1,0 +1,116 @@
+/** Suggestions: tomorrow's NBA games and the players you could start from them, with comparison stats. */
+import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { getDb, schema } from "@/db";
+import { currentWeek, loadLeagueContext, teamsPlayingByDay } from "./model";
+import { addDays, today } from "../dates";
+
+interface Avg {
+  gp: number;
+  min: number;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  tov: number;
+  fg3m: number;
+  fgPct: number | null;
+  ftPct: number | null;
+}
+
+type Log = typeof schema.playerGameLogs.$inferSelect;
+
+function average(logs: Log[]): Avg {
+  const g = logs.filter((l) => l.minutes > 0);
+  const sum = (f: (l: Log) => number) => g.reduce((s, l) => s + f(l), 0);
+  const avg = (f: (l: Log) => number) => (g.length ? Math.round((sum(f) / g.length) * 10) / 10 : 0);
+  return {
+    gp: g.length,
+    min: avg((l) => l.minutes),
+    pts: avg((l) => l.pts),
+    reb: avg((l) => l.reb),
+    ast: avg((l) => l.ast),
+    stl: avg((l) => l.stl),
+    blk: avg((l) => l.blk),
+    tov: avg((l) => l.tov),
+    fg3m: avg((l) => l.fg3m),
+    fgPct: sum((l) => l.fga) ? sum((l) => l.fgm) / sum((l) => l.fga) : null,
+    ftPct: sum((l) => l.fta) ? sum((l) => l.ftm) / sum((l) => l.fta) : null,
+  };
+}
+
+export async function tomorrowView(leagueId: number) {
+  const db = getDb();
+  const date = addDays(today(), 1); // US Eastern
+  const games = (await teamsPlayingByDay([date])).get(date)!;
+  const teams = await db.select().from(schema.nbaTeams);
+  const abbr = new Map(teams.map((t) => [t.id, t.abbreviation]));
+  const matchups = new Map<string, { home: string; away: string; tipTime: string | null }>();
+  for (const [teamId, g] of games) {
+    const me = abbr.get(teamId)!;
+    const [home, away] = g.home ? [me, g.opponent] : [g.opponent, me];
+    matchups.set(`${away}@${home}`, { home, away, tipTime: g.tipTime?.toISOString() ?? null });
+  }
+
+  const ctx = await loadLeagueContext(leagueId);
+  const mine = new Set(ctx.myTeam ? ctx.roster.filter((r) => r.fantasyTeamId === ctx.myTeam!.id).map((r) => r.playerId) : []);
+  const ownerOf = new Map(ctx.roster.map((r) => [r.playerId, ctx.teams.find((t) => t.id === r.fantasyTeamId)?.name ?? null]));
+  const playingTeamIds = [...games.keys()];
+  const players = await db
+    .select({
+      id: schema.players.id,
+      name: schema.players.fullName,
+      positions: schema.players.eligiblePositions,
+      nbaTeamId: schema.players.nbaTeamId,
+      injury: schema.playerInjuries.status,
+    })
+    .from(schema.players)
+    .leftJoin(schema.playerInjuries, eq(schema.playerInjuries.playerId, schema.players.id))
+    .where(
+      and(
+        eq(schema.players.isActive, true),
+        or(
+          playingTeamIds.length ? inArray(schema.players.nbaTeamId, playingTeamIds) : undefined,
+          mine.size ? inArray(schema.players.id, [...mine]) : undefined,
+        ),
+      ),
+    );
+  const ids = players.map((p) => p.id);
+  const logs = ids.length
+    ? await db
+        .select()
+        .from(schema.playerGameLogs)
+        .where(and(inArray(schema.playerGameLogs.playerId, ids), gte(schema.playerGameLogs.gameDate, addDays(today(), -240))))
+        .orderBy(desc(schema.playerGameLogs.gameDate))
+    : [];
+  const logsOf = new Map<number, Log[]>();
+  for (const l of logs) logsOf.set(l.playerId, [...(logsOf.get(l.playerId) ?? []), l]);
+
+  const week = currentWeek(ctx);
+  const byDay = await teamsPlayingByDay(week.remainingDays);
+  const rows = players.map((p) => {
+    const m = ctx.players.get(p.id);
+    const g = p.nbaTeamId ? games.get(p.nbaTeamId) : undefined;
+    const own = logsOf.get(p.id) ?? [];
+    return {
+      ...p,
+      team: p.nbaTeamId ? (abbr.get(p.nbaTeamId) ?? null) : null,
+      tomorrow: g ? `${g.home ? "vs" : "@"} ${g.opponent}` : null,
+      mine: mine.has(p.id),
+      owner: ownerOf.get(p.id) ?? null,
+      value: m?.valuePerGame ?? null,
+      categoryZ: m?.categoryZ ?? {},
+      gamesLeftThisWeek: p.nbaTeamId ? week.remainingDays.filter((d) => byDay.get(d)!.has(p.nbaTeamId!)).length : 0,
+      season: average(own),
+      last5: average(own.filter((l) => l.minutes > 0).slice(0, 5)),
+    };
+  });
+  rows.sort((a, b) => (b.value ?? -99) - (a.value ?? -99));
+  return {
+    date,
+    games: [...matchups.values()].sort((a, b) => (a.tipTime ?? "").localeCompare(b.tipTime ?? "")),
+    categories: ctx.rules.categories,
+    rosterSlots: ctx.rules.roster_slots,
+    players: rows,
+  };
+}

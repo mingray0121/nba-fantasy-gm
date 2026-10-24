@@ -57,5 +57,41 @@ export async function nbaTeamView(leagueId: number, abbreviation: string) {
     };
   });
   rows.sort((x, y) => y.min - x.min || x.name.localeCompare(y.name));
-  return { team: { abbreviation: team.abbreviation, name: team.name }, players: rows };
+  return { team: { abbreviation: team.abbreviation, name: team.name }, teamStats: await teamPerGame(ids), players: rows };
+}
+
+/** Team per-game totals this season, summed from its current players' box scores game by game. */
+async function teamPerGame(playerIds: number[]) {
+  if (playerIds.length === 0) return null;
+  const [t] = await getDb()
+    .select({
+      gp: sql<number>`count(distinct ${schema.playerGameLogs.gameId})::int`,
+      pts: sql<number>`sum(${schema.playerGameLogs.pts})::float`,
+      reb: sql<number>`sum(${schema.playerGameLogs.reb})::float`,
+      ast: sql<number>`sum(${schema.playerGameLogs.ast})::float`,
+      fg3m: sql<number>`sum(${schema.playerGameLogs.fg3m})::float`,
+      stl: sql<number>`sum(${schema.playerGameLogs.stl})::float`,
+      blk: sql<number>`sum(${schema.playerGameLogs.blk})::float`,
+      tov: sql<number>`sum(${schema.playerGameLogs.tov})::float`,
+      fgm: sql<number>`sum(${schema.playerGameLogs.fgm})::float`,
+      fga: sql<number>`sum(${schema.playerGameLogs.fga})::float`,
+      ftm: sql<number>`sum(${schema.playerGameLogs.ftm})::float`,
+      fta: sql<number>`sum(${schema.playerGameLogs.fta})::float`,
+    })
+    .from(schema.playerGameLogs)
+    .where(inArray(schema.playerGameLogs.playerId, playerIds));
+  if (!t?.gp) return null;
+  const per = (v: number) => Math.round((v / t.gp) * 10) / 10;
+  return {
+    gp: t.gp,
+    pts: per(t.pts),
+    reb: per(t.reb),
+    ast: per(t.ast),
+    fg3m: per(t.fg3m),
+    stl: per(t.stl),
+    blk: per(t.blk),
+    tov: per(t.tov),
+    fgPct: t.fga ? t.fgm / t.fga : null,
+    ftPct: t.fta ? t.ftm / t.fta : null,
+  };
 }

@@ -617,11 +617,10 @@ export async function playerView(playerId: number, leagueId?: number) {
   const played = logs.filter((l) => l.minutes > 0); // newest first
   const career = player.espnId ? await espnCareer(player.espnId) : [];
   const thisSeason = career[0]?.label;
+  // A "last N games" row only appears once he has played more than N games.
   const averages = [
     { label: "This season", ...averageRow(logs) },
-    { label: "Last 5 games", ...averageRow(played.slice(0, 5)) },
-    { label: "Last 10 games", ...averageRow(played.slice(0, 10)) },
-    { label: "Last 15 games", ...averageRow(played.slice(0, 15)) },
+    ...[5, 10, 15].filter((n) => played.length > n).map((n) => ({ label: `Last ${n} games`, ...averageRow(played.slice(0, n)) })),
   ];
   // ESPN lists the current season too; past seasons are the (up to) three before it.
   const past = career.filter((c) => c.label !== "Career" && c.label !== thisSeason).slice(0, 3);

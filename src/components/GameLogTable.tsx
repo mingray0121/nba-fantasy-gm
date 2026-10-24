@@ -87,8 +87,8 @@ function TrendChart({ col, games }: { col: Col; games: GameRow[] }) {
   const pts = [...games]
     .filter(played)
     .reverse()
-    .map((g) => ({ date: g.gameDate.slice(5), v: col.value(g) }))
-    .filter((p): p is { date: string; v: number } => p.v != null);
+    .map((g, i) => ({ n: i + 1, v: col.value(g) }))
+    .filter((p): p is { n: number; v: number } => p.v != null);
   if (pts.length === 0) return <p className="p-3 text-xs text-slate-500">No games yet.</p>;
   const W = 280;
   const H = 120;
@@ -115,7 +115,7 @@ function TrendChart({ col, games }: { col: Col; games: GameRow[] }) {
           </text>
           {(pts.length <= 8 || i % Math.ceil(pts.length / 8) === 0) && (
             <text x={x(i)} y={H - 6} textAnchor="middle" className="fill-slate-400 text-[9px]">
-              {p.date}
+              G{p.n}
             </text>
           )}
         </g>
@@ -149,7 +149,7 @@ export function GameLogTable({ games, showAverage = false, chart = false }: { ga
             {COLS.map((c) => (
               <th
                 key={c.label}
-                className={`text-right ${chart ? "cursor-help underline decoration-dotted underline-offset-4" : ""}`}
+                className={`text-right ${chart ? "cursor-pointer underline decoration-dotted underline-offset-4" : ""}`}
                 onMouseEnter={(e) => chart && show(c.label, e)}
                 onMouseLeave={() => chart && setOpen(null)}
                 onClick={(e) => chart && (open?.label === c.label ? setOpen(null) : show(c.label, e))}
