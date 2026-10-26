@@ -3,7 +3,7 @@
  * projections) and values every relevant player under that league's scoring.
  * Everything here is scoped to a single league.
  */
-import { and, desc, eq, gte, inArray, lte, max } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, max } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getActiveRules } from "./rules";
 import { DEFAULT_RULES, type LeagueRules } from "../rules/schema";
@@ -283,6 +283,23 @@ export async function latestMatchup(leagueId: number, teamId: number) {
     .orderBy(desc(schema.matchups.week))
     .limit(1);
   return m ?? null;
+}
+
+/** This week's dates and number (counted from the first regular-season week) for a league. */
+export async function thisWeek(leagueId: number) {
+  const db = getDb();
+  const rules = (await getActiveRules(leagueId))?.rules;
+  const { start, end } = weekRange(today(), rules?.week_start_day ?? 1);
+  // Week number counted from the week of the first regular-season game.
+  const [first] = await db
+    .select({ day: schema.nbaGames.gameDate })
+    .from(schema.nbaGames)
+    .where(eq(schema.nbaGames.gameType, "regular"))
+    .orderBy(asc(schema.nbaGames.gameDate))
+    .limit(1);
+  const firstStart = first ? weekRange(first.day, rules?.week_start_day ?? 1).start : start;
+  const week = Math.max(1, Math.round((Date.parse(start) - Date.parse(firstStart)) / (7 * 86400000)) + 1);
+  return { start, end, week };
 }
 
 export { addDays };

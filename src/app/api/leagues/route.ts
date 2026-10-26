@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
-import { handler, HttpError, requireUser } from "@/lib/api";
+import { handler, HttpError, requireOwner, requireUser } from "@/lib/api";
 import { listLeagues } from "@/lib/data/leagues";
 import { saveRuleVersion } from "@/lib/data/rules";
 import { runJob } from "@/lib/jobs/registry";
@@ -28,7 +28,7 @@ const body = z.union([
 
 /** Connect a Yahoo league, or create a manual one. */
 export const POST = handler(async (req: Request) => {
-  const userId = await requireUser();
+  const userId = await requireOwner();
   const input = body.parse(await req.json());
   const db = getDb();
 

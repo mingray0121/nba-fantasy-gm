@@ -17,3 +17,7 @@ next-env.d.ts
 .DS_Store
 .idea
 .vscode
+
+# Local notes, not tracked for now
+RELEASE_NOTES.md
+docs/multi-user-design.md

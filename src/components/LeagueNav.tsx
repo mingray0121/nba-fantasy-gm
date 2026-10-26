@@ -10,9 +10,11 @@ import { TimeZoneToggle } from "./timezone";
 interface Props {
   league: { id: number; name: string; source: string; scoringType: string | null; lastSyncAt: string | null };
   leagues: { id: number; name: string }[];
+  /** Demo visitors: show what the demo is and hide data refresh. */
+  demo?: boolean;
 }
 
-export function LeagueNav({ league, leagues }: Props) {
+export function LeagueNav({ league, leagues, demo }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const qc = useQueryClient();
@@ -44,6 +46,11 @@ export function LeagueNav({ league, leagues }: Props) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/85">
+      {demo && (
+        <div className="bg-ember-500 px-4 py-1.5 text-center text-xs font-medium text-white">
+          Demo league with made-up teams. Change anything you like; it resets when you close the browser.
+        </div>
+      )}
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-3 pb-2">
         <Link href="/leagues" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
           <span className="grid size-6 place-items-center rounded-full bg-ember-500 text-[10px] font-bold text-white shadow-sm">GM</span>
@@ -64,10 +71,12 @@ export function LeagueNav({ league, leagues }: Props) {
         </select>
         <div className="ml-auto flex items-center gap-2 text-xs text-slate-500">
           <TimeZoneToggle />
-          <span className="hidden md:inline">Updated {timeAgo(league.lastSyncAt)}</span>
-          <button className="btn-secondary px-3 py-1.5 text-xs" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-            {refresh.isPending ? "Refreshing…" : "Refresh"}
-          </button>
+          {!demo && <span className="hidden md:inline">Updated {timeAgo(league.lastSyncAt)}</span>}
+          {!demo && (
+            <button className="btn-secondary px-3 py-1.5 text-xs" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+              {refresh.isPending ? "Refreshing…" : "Refresh"}
+            </button>
+          )}
         </div>
       </div>
       <nav className="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-4">

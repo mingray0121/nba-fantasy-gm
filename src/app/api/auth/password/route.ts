@@ -1,8 +1,9 @@
+import { asc, like, not } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb, schema } from "@/db";
 import { safeEqual } from "@/lib/crypto";
 import { optionalEnv } from "@/lib/env";
-import { LOCAL_OWNER_GUID, setSessionCookie } from "@/lib/session";
+import { DEMO_GUID_PREFIX, LOCAL_OWNER_GUID, setSessionCookie } from "@/lib/session";
 
 function back(req: NextRequest, path: string) {
   return NextResponse.redirect(new URL(path, req.url), { status: 303 });
@@ -20,7 +21,12 @@ export async function POST(req: NextRequest) {
   if (!safeEqual(password, expected)) return back(req, "/login?error=Wrong%20password");
 
   const db = getDb();
-  let [owner] = await db.select().from(schema.users).limit(1);
+  let [owner] = await db
+    .select()
+    .from(schema.users)
+    .where(not(like(schema.users.yahooGuid, `${DEMO_GUID_PREFIX}%`)))
+    .orderBy(asc(schema.users.id))
+    .limit(1);
   if (!owner) [owner] = await db.insert(schema.users).values({ yahooGuid: LOCAL_OWNER_GUID }).returning();
   await setSessionCookie(owner.id);
   return back(req, "/leagues");

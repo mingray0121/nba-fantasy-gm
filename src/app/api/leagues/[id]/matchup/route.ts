@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { handler, HttpError, requireLeague } from "@/lib/api";
-import { getActiveRules } from "@/lib/data/rules";
+import { thisWeek } from "@/lib/data/model";
 import { matchupView } from "@/lib/data/views";
-import { addDays, today, weekRange } from "@/lib/dates";
+import { addDays, today } from "@/lib/dates";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -26,22 +26,6 @@ const input = z.object({
   // The entered totals cover games through the end of this US Eastern date (default: yesterday).
   throughDate: z.iso.date().nullable().optional(),
 });
-
-async function thisWeek(leagueId: number) {
-  const db = getDb();
-  const rules = (await getActiveRules(leagueId))?.rules;
-  const { start, end } = weekRange(today(), rules?.week_start_day ?? 1);
-  // Week number counted from the week of the first regular-season game.
-  const [first] = await db
-    .select({ day: schema.nbaGames.gameDate })
-    .from(schema.nbaGames)
-    .where(eq(schema.nbaGames.gameType, "regular"))
-    .orderBy(asc(schema.nbaGames.gameDate))
-    .limit(1);
-  const firstStart = first ? weekRange(first.day, rules?.week_start_day ?? 1).start : start;
-  const week = Math.max(1, Math.round((Date.parse(start) - Date.parse(firstStart)) / (7 * 86400000)) + 1);
-  return { start, end, week };
-}
 
 /**
  * Manual leagues: set any matchup this week (two teams), plus optional totals copied from

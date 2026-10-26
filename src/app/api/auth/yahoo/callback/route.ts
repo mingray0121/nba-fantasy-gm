@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { asc, eq, like, not } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb, schema } from "@/db";
 import { exchangeCode, fetchGuid, saveTokens } from "@/lib/yahoo/oauth";
-import { LOCAL_OWNER_GUID, setSessionCookie } from "@/lib/session";
+import { DEMO_GUID_PREFIX, LOCAL_OWNER_GUID, setSessionCookie } from "@/lib/session";
 import { optionalEnv } from "@/lib/env";
 
 function fail(req: NextRequest, reason: string) {
@@ -31,7 +31,12 @@ async function signIn(req: NextRequest) {
 
   // Only one Yahoo account may use the app: ALLOWED_YAHOO_GUID, or else the first account that signed in.
   const allowed = optionalEnv("ALLOWED_YAHOO_GUID");
-  const [existing] = await db.select().from(schema.users).limit(1);
+  const [existing] = await db
+    .select()
+    .from(schema.users)
+    .where(not(like(schema.users.yahooGuid, `${DEMO_GUID_PREFIX}%`)))
+    .orderBy(asc(schema.users.id))
+    .limit(1);
 
   // An owner created by password sign-in gets this Yahoo account linked on the first Yahoo sign-in.
   if (existing?.yahooGuid === LOCAL_OWNER_GUID && (!allowed || guid === allowed)) {

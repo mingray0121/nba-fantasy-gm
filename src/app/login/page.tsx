@@ -20,6 +20,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         Sign in with Yahoo
       </a>
       <p className="text-xs text-slate-500">Only the owner&apos;s Yahoo account can sign in.</p>
+      <form method="post" action="/api/auth/demo" className="flex flex-col gap-2 border-t border-slate-200 pt-6 dark:border-slate-800">
+        <button className="btn-secondary py-3">Try the demo</button>
+        <p className="text-xs text-slate-500">
+          No sign-in needed. You get a made-up 12-team league to play with; your changes reset when you close the browser.
+        </p>
+      </form>
     </main>
   );
 }

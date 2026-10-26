@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { isDemoUser } from "@/lib/api";
 import { requireUserPage } from "@/lib/session";
 import { listLeagues } from "@/lib/data/leagues";
 import { Badge, PageTitle, timeAgo } from "@/components/ui";
@@ -15,6 +17,8 @@ export default async function LeaguesPage() {
   const userId = await requireUserPage();
   const leagues = await listLeagues(userId);
   const active = leagues.filter((l) => !l.isArchived);
+  // Demo visitors have exactly one league and nothing to connect.
+  if (active.length > 0 && (await isDemoUser(userId))) redirect(`/leagues/${active[0].id}/today`);
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
       <PageTitle title="My leagues" subtitle="Each league keeps its own rules, roster and recommendations." actions={<SignOut />} />

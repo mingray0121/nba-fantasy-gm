@@ -4,6 +4,7 @@ import { buildCategoryScorer, pointsValue } from "@/lib/engine/values";
 import { averageLogs, blendWindows, computeWindows, playProbability, type GameLog } from "@/lib/engine/projections";
 import { projectCategories, matchupWeights } from "@/lib/engine/matchup";
 import { suggestAddDrops } from "@/lib/engine/addDrop";
+import { DEMO_RULES, demoTeamNames, snakeDraft } from "@/lib/data/demo";
 import { EMPTY_LINE, normalizeStatKey, type StatLine } from "@/lib/stats";
 
 const line = (o: Partial<StatLine>): StatLine => ({ ...EMPTY_LINE, ...o });
@@ -229,5 +230,28 @@ describe("injured list plan", () => {
       [1, "IL"],
       [2, "IL+"],
     ]);
+  });
+});
+
+describe("demo league", () => {
+  it("names twelve distinct teams and snake-drafts legal rosters", () => {
+    const rand = (() => {
+      let i = 0;
+      return () => ((i++ * 0.37) % 1);
+    })();
+    const names = demoTeamNames(rand);
+    expect(new Set(names).size).toBe(12);
+    expect(names[0]).toMatch(/^.+'s \w+ Team$/);
+
+    const positions = [["PG"], ["SG"], ["SF"], ["PF"], ["C"], ["PG", "SG"], ["SF", "PF"], ["PF", "C"]];
+    const pool = Array.from({ length: 300 }, (_, i) => ({ playerId: i, positions: positions[i % positions.length], value: 300 - i }));
+    const slots = DEMO_RULES.roster_slots;
+    const rosters = snakeDraft(pool, 12, slots, rand);
+    const ids = rosters.flat().map((p) => p.playerId);
+    expect(new Set(ids).size).toBe(ids.length); // nobody drafted twice
+    for (const r of rosters) {
+      expect(r).toHaveLength(13);
+      expect(r.filter((p) => p.slot !== "BN")).toHaveLength(10); // every starting slot filled
+    }
   });
 });

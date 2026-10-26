@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { ZodError } from "zod";
 import { getDb, schema } from "@/db";
-import { currentUserId } from "./session";
+import { currentUserId, DEMO_GUID_PREFIX } from "./session";
 import { env } from "./env";
 import { safeEqual } from "./crypto";
 
@@ -37,6 +37,18 @@ export function handler<A extends unknown[]>(fn: (...args: A) => Promise<Respons
 export async function requireUser(): Promise<number> {
   const id = await currentUserId();
   if (!id) throw new HttpError(401, "Not signed in");
+  return id;
+}
+
+export async function isDemoUser(userId: number): Promise<boolean> {
+  const [user] = await getDb().select({ guid: schema.users.yahooGuid }).from(schema.users).where(eq(schema.users.id, userId));
+  return !user || user.guid.startsWith(DEMO_GUID_PREFIX);
+}
+
+/** Signed-in user who is not a demo visitor (for Yahoo, new leagues and data refreshes). */
+export async function requireOwner(): Promise<number> {
+  const id = await requireUser();
+  if (await isDemoUser(id)) throw new HttpError(403, "Not available in the demo");
   return id;
 }
 
