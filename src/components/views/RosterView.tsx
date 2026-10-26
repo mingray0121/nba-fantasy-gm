@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { fmtTipTime, useTimeZone } from "../timezone";
-import { ErrorBox, PageTitle, PlayerLink, SlotPill, StatusBadge } from "../ui";
+import { ErrorBox, MINE_BUTTON, PageTitle, PlayerLink, SlotPill, StatusBadge } from "../ui";
 
 /** Yahoo's roster order. */
 const SLOTS = ["PG", "SG", "G", "SF", "PF", "F", "C", "UTIL", "BN", "IL", "IL+"];
@@ -86,7 +86,12 @@ export function RosterView({ leagueId }: { leagueId: number }) {
       <PageTitle title="Roster" subtitle="Enter every team's players. Players on no team count as free agents for add / drop." />
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-4">
         {teams.data?.teams.map((t) => (
-          <button key={t.id} className={t.id === teamId ? "btn-primary" : "btn-secondary"} onClick={() => setSelected(t.id)}>
+          <button
+            key={t.id}
+            className={`${t.id === teamId ? "btn-primary" : "btn-secondary"} ${t.isMine ? MINE_BUTTON : ""}`}
+            onClick={() => setSelected(t.id)}
+          >
+            {t.isMine && <span className="mr-1.5 size-2 rounded-full bg-ember-500" aria-hidden />}
             {t.name}
             {t.isMine ? " (you)" : ""}
           </button>

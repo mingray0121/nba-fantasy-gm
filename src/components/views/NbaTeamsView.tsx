@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
-import { Badge, Empty, ErrorBox, Loading, PageTitle, PlayerLink, StatusBadge } from "../ui";
+import { Badge, Empty, ErrorBox, Loading, PageTitle, PlayerLink, StatusBadge, YouBadge } from "../ui";
 
 interface TeamRow {
   id: number;
@@ -17,6 +17,7 @@ interface TeamRow {
   ast: number;
   value: number | null;
   owner: string | null;
+  mine: boolean;
 }
 
 /** Search an NBA team and see this season's roster, positions and who owns each player in your league. */
@@ -77,7 +78,7 @@ export function NbaTeamsView({ leagueId }: { leagueId: number }) {
             </thead>
             <tbody>
               {roster.data.players.map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} className={p.mine ? "bg-ember-500/10" : ""}>
                   <td className="whitespace-nowrap">
                     <PlayerLink id={p.id} name={p.name} leagueId={leagueId} className="font-medium" /> <StatusBadge status={p.injury} />
                   </td>
@@ -90,7 +91,7 @@ export function NbaTeamsView({ leagueId }: { leagueId: number }) {
                   <td className={`text-right tabular-nums ${p.value != null && p.value < 0 ? "text-slate-400" : ""}`}>
                     {p.value == null ? "—" : p.value.toFixed(2)}
                   </td>
-                  <td>{p.owner ? <span className="text-sm">{p.owner}</span> : <Badge tone="green">Free agent</Badge>}</td>
+                  <td>{p.mine ? <YouBadge /> : p.owner ? <span className="text-sm">{p.owner}</span> : <Badge tone="green">Free agent</Badge>}</td>
                 </tr>
               ))}
             </tbody>

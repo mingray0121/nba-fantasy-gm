@@ -10,8 +10,8 @@ import { TimeZoneToggle } from "./timezone";
 interface Props {
   league: { id: number; name: string; source: string; scoringType: string | null; lastSyncAt: string | null };
   leagues: { id: number; name: string }[];
-  /** Demo visitors: show what the demo is and hide data refresh. */
-  demo?: boolean;
+  /** Demo visitors: show what the demo is and which team is theirs, and hide data refresh. */
+  demo?: { team: string | null };
 }
 
 export function LeagueNav({ league, leagues, demo }: Props) {
@@ -48,7 +48,7 @@ export function LeagueNav({ league, leagues, demo }: Props) {
     <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/85">
       {demo && (
         <div className="bg-ember-500 px-4 py-1.5 text-center text-xs font-medium text-white">
-          Demo league with made-up teams. Change anything you like; it resets when you close the browser.
+          Demo league{demo.team ? <>: you manage <strong>{demo.team}</strong></> : null}. Change anything you like; it resets when you close the browser.
         </div>
       )}
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 pt-3 pb-2">

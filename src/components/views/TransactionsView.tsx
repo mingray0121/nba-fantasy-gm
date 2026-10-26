@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
-import { ErrorBox, Loading, PageTitle } from "../ui";
+import { ErrorBox, Loading, MINE_BUTTON, PageTitle } from "../ui";
 import { useTimeZone } from "../timezone";
 import { LockedNotice } from "./RosterView";
 
@@ -81,7 +81,12 @@ export function TransactionsView({ leagueId }: { leagueId: number }) {
       />
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-4">
         {d.teams.map((t) => (
-          <button key={t.id} className={t.id === teamId ? "btn-primary" : "btn-secondary"} onClick={() => setSelected(t.id)}>
+          <button
+            key={t.id}
+            className={`${t.id === teamId ? "btn-primary" : "btn-secondary"} ${t.isMine ? MINE_BUTTON : ""}`}
+            onClick={() => setSelected(t.id)}
+          >
+            {t.isMine && <span className="mr-1.5 size-2 rounded-full bg-ember-500" aria-hidden />}
             {t.name}
             {t.isMine ? " (you)" : ""}
             <span className="ml-1 text-xs opacity-75">

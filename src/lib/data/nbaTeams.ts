@@ -54,6 +54,7 @@ export async function nbaTeamView(leagueId: number, abbreviation: string) {
       ast: a?.ast ?? 0,
       value: ctx.players.get(p.id)?.valuePerGame ?? null,
       owner: ownerOf.get(p.id) ?? null,
+      mine: ctx.roster.some((r) => r.playerId === p.id && r.fantasyTeamId === ctx.myTeam?.id),
     };
   });
   rows.sort((x, y) => y.min - x.min || x.name.localeCompare(y.name));

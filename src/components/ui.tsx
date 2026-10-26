@@ -19,7 +19,16 @@ const TONES = {
   amber: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-900",
   blue: "bg-court-50 text-court-700 ring-court-100 dark:bg-slate-800 dark:text-sky-200 dark:ring-slate-700",
   gray: "bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
+  ember: "bg-ember-500 text-white ring-ember-500",
 };
+
+/** Your own team is always shown in ember (orange), so it stands out at a glance. */
+export const MINE_TEXT = "font-semibold text-ember-600 dark:text-ember-400";
+export const MINE_BUTTON = "ring-2 ring-ember-500";
+
+export function YouBadge() {
+  return <Badge tone="ember">You</Badge>;
+}
 
 export function Badge({ tone = "gray", children }: { tone?: keyof typeof TONES; children: ReactNode }) {
   return (

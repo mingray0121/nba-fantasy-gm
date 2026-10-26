@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../fetcher";
 import { fits } from "./RosterView";
 import { fmtTipTime, useTimeZone } from "../timezone";
-import { Badge, Empty, ErrorBox, Loading, PlayerLink, StatusBadge } from "../ui";
+import { Badge, Empty, ErrorBox, Loading, PlayerLink, StatusBadge, YouBadge } from "../ui";
 
 interface Avg {
   gp: number;
@@ -151,7 +151,7 @@ export function UpcomingPanel({ leagueId }: { leagueId: number }) {
             </thead>
             <tbody>
               {candidates.slice(0, 40).map((p) => (
-                <tr key={p.id} className={p.mine ? "bg-court-50/60 dark:bg-slate-800/50" : ""}>
+                <tr key={p.id} className={p.mine ? "bg-ember-500/10" : ""}>
                   <td>
                     <input type="checkbox" checked={compare.includes(p.id)} onChange={() => toggle(p.id)} aria-label={`Compare ${p.name}`} />
                   </td>
@@ -165,7 +165,7 @@ export function UpcomingPanel({ leagueId }: { leagueId: number }) {
                   <td className="text-right tabular-nums">{p.season.reb.toFixed(1)}</td>
                   <td className="text-right tabular-nums">{p.season.ast.toFixed(1)}</td>
                   <td className="text-right tabular-nums">{p.gamesLeftThisWeek}</td>
-                  <td>{p.mine ? <Badge tone="blue">You</Badge> : p.owner ? <span className="text-xs">{p.owner}</span> : <Badge tone="green">Free agent</Badge>}</td>
+                  <td>{p.mine ? <YouBadge /> : p.owner ? <span className="text-xs">{p.owner}</span> : <Badge tone="green">Free agent</Badge>}</td>
                 </tr>
               ))}
             </tbody>
@@ -184,7 +184,7 @@ function TeamPanel({ leagueId, abbr }: { leagueId: number; abbr: string }) {
       api<{
         team: { name: string };
         teamStats: { gp: number; pts: number; reb: number; ast: number; fg3m: number; stl: number; blk: number; tov: number; fgPct: number | null; ftPct: number | null } | null;
-        players: { id: number; name: string; positions: string[]; injury: string | null; gp: number; min: number; pts: number; reb: number; ast: number; owner: string | null }[];
+        players: { id: number; name: string; positions: string[]; injury: string | null; gp: number; min: number; pts: number; reb: number; ast: number; owner: string | null; mine: boolean }[];
       }>(`/api/leagues/${leagueId}/nba-teams?team=${abbr}`),
   });
   if (q.isLoading) return <Loading />;
@@ -217,7 +217,7 @@ function TeamPanel({ leagueId, abbr }: { leagueId: number; abbr: string }) {
           </thead>
           <tbody>
             {players.slice(0, 10).map((p) => (
-              <tr key={p.id}>
+              <tr key={p.id} className={p.mine ? "bg-ember-500/10" : ""}>
                 <td className="whitespace-nowrap">
                   <PlayerLink id={p.id} name={p.name} leagueId={leagueId} className="font-medium" /> <StatusBadge status={p.injury} />
                 </td>
@@ -227,7 +227,7 @@ function TeamPanel({ leagueId, abbr }: { leagueId: number; abbr: string }) {
                 <td className="text-right tabular-nums">{p.pts.toFixed(1)}</td>
                 <td className="text-right tabular-nums">{p.reb.toFixed(1)}</td>
                 <td className="text-right tabular-nums">{p.ast.toFixed(1)}</td>
-                <td>{p.owner ? <span className="text-xs">{p.owner}</span> : <Badge tone="green">Free agent</Badge>}</td>
+                <td>{p.mine ? <YouBadge /> : p.owner ? <span className="text-xs">{p.owner}</span> : <Badge tone="green">Free agent</Badge>}</td>
               </tr>
             ))}
           </tbody>

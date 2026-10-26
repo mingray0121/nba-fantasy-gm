@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../fetcher";
-import { Badge, Empty, ErrorBox, Loading, PageTitle } from "../ui";
+import { Badge, Empty, ErrorBox, Loading, MINE_TEXT, PageTitle, YouBadge } from "../ui";
 
 type Category = {
   key: string;
@@ -155,8 +155,10 @@ function MatchupCard({
   return (
     <div className="mb-6">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        {m.isMine && <Badge tone="green">your matchup</Badge>}
+        <h2 className="text-lg font-semibold">
+          <span className={m.isMine ? MINE_TEXT : ""}>{r.teamName ?? "Team"}</span> vs {r.opponentName ?? "opponent"}
+        </h2>
+        {m.isMine && <YouBadge />}
         {manual && (
           <div className="ml-auto flex gap-3 text-xs">
             <button className="text-slate-500 underline" onClick={() => setEditing(!editing)}>
@@ -191,17 +193,17 @@ function MatchupCard({
           onDone={() => setEditing(false)}
         />
       )}
-      {r.kind === "points" ? <PointsResult r={r} /> : <CategoriesResult r={r} punted={punted} />}
+      {r.kind === "points" ? <PointsResult r={r} mine={m.isMine} /> : <CategoriesResult r={r} punted={punted} mine={m.isMine} />}
     </div>
   );
 }
 
-function PointsResult({ r }: { r: Extract<Result, { kind: "points" }> }) {
+function PointsResult({ r, mine }: { r: Extract<Result, { kind: "points" }>; mine: boolean }) {
   const lead = r.mine - r.opponent;
   return (
     <div className="card grid grid-cols-2 gap-4 p-6 text-center">
       <div>
-        <div className="text-sm text-slate-500">{r.teamName}</div>
+        <div className={`text-sm ${mine ? MINE_TEXT : "text-slate-500"}`}>{r.teamName}</div>
         <div className="text-3xl font-semibold tabular-nums">{r.mine}</div>
         <div className="text-xs text-slate-500">{r.mineToDate} so far</div>
       </div>
@@ -219,7 +221,7 @@ function PointsResult({ r }: { r: Extract<Result, { kind: "points" }> }) {
   );
 }
 
-function CategoriesResult({ r, punted }: { r: Extract<Result, { kind: "categories" }>; punted: string[] }) {
+function CategoriesResult({ r, punted, mine }: { r: Extract<Result, { kind: "categories" }>; punted: string[]; mine: boolean }) {
   const won = r.categories.filter((c) => c.state === "winning").length;
   const lost = r.categories.filter((c) => c.state === "losing").length;
   const close = r.categories.filter((c) => c.state === "close");
@@ -227,7 +229,7 @@ function CategoriesResult({ r, punted }: { r: Extract<Result, { kind: "categorie
     <>
       <div className="card mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4 p-5">
         <div className="min-w-0">
-          <div className="truncate font-semibold">{r.teamName}</div>
+          <div className={`truncate font-semibold ${mine ? MINE_TEXT : ""}`}>{r.teamName}</div>
           <div className="text-xs text-slate-500">projected wins</div>
         </div>
         <div className="text-center">
@@ -268,7 +270,7 @@ function CategoriesResult({ r, punted }: { r: Extract<Result, { kind: "categorie
               {[0, 1].map((n) => [
                 <th
                   key={`a${n}`}
-                  className="max-w-32 truncate border-l border-slate-100 text-right normal-case dark:border-slate-800"
+                  className={`max-w-32 truncate border-l border-slate-100 text-right normal-case dark:border-slate-800 ${mine ? MINE_TEXT : ""}`}
                   title={r.teamName ?? ""}
                 >
                   {r.teamName}
